@@ -648,8 +648,8 @@ export function Form({
 
     return (
       <React.Fragment key={section.id}>
-        {/* Add separator between progressive sections (not for the first section) */}
-        {index > 0 && section.reveal && (
+        {/* Add separator between sections (not for the first section) */}
+        {index > 0 && (section.reveal || section.title) && (
           <Separator className="my-8" />
         )}
         

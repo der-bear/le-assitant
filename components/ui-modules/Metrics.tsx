@@ -128,7 +128,7 @@ export function Metrics({
         )}
 
         {/* Loading State */}
-        <div className={`border rounded-lg p-6 shadow-lg bg-card ${getGridClasses()}`}>
+        <div className={getGridClasses()}>
           {Array.from({ length: metrics.length || 4 }).map((_, index) => (
             <Card key={index} className="p-6 animate-pulse">
               <div className="space-y-4">
@@ -244,7 +244,7 @@ export function Metrics({
         </Alert>
       )}
 
-      <div className={`border rounded-lg p-6 shadow-lg bg-card ${getGridClasses()}`}>
+      <div className={getGridClasses()}>
         {metrics.map((metric) => (
           <Card key={metric.id} className="p-6">
             <div className="space-y-2">

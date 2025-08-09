@@ -118,29 +118,34 @@ const componentExamples: ComponentExample[] = [
     component: ChoiceList
   },
   {
-    id: 'table-basic',
-    title: 'Table - Data Grid',
-    description: 'Sortable table with actions and selection',
+    id: 'table-clients',
+    title: 'Table - Client Directory',
+    description: 'Sortable table with filtering and row actions',
     module: 'Table',
     props: {
       kind: 'table',
-      title: 'Recent Clients',
+      title: 'Client Directory',
+      description: 'Manage your active clients with sorting and filtering',
       columns: [
-        { key: 'company', label: 'Company', sortable: true },
-        { key: 'email', label: 'Email', sortable: true },
-        { key: 'status', label: 'Status', type: 'badge', sortable: true },
-        { key: 'leads', label: 'Leads', type: 'number', sortable: true },
-        { key: 'revenue', label: 'Revenue', type: 'number', sortable: true }
+        { key: 'company', label: 'Company', sortable: true, width: '30%' },
+        { key: 'email', label: 'Email', sortable: true, width: '25%' },
+        { key: 'status', label: 'Status', sortable: true, width: '15%' },
+        { key: 'leads', label: 'Leads', type: 'number', sortable: true, width: '15%' },
+        { key: 'created', label: 'Created', type: 'date', sortable: true, width: '15%' }
       ],
       data: [
-        { id: '1', company: 'Acme Corp', email: 'contact@acme.com', status: 'Active', leads: 152, revenue: 4560 },
-        { id: '2', company: 'TechStart Inc', email: 'hello@techstart.io', status: 'Active', leads: 89, revenue: 2670 },
-        { id: '3', company: 'Global Solutions', email: 'info@globalsol.com', status: 'Paused', leads: 234, revenue: 7020 }
+        { id: '1', company: 'Acme Corp', email: 'contact@acme.com', status: 'Active', leads: 1247, created: '2024-01-15' },
+        { id: '2', company: 'TechStart Inc', email: 'hello@techstart.io', status: 'Active', leads: 856, created: '2024-02-03' },
+        { id: '3', company: 'Global Solutions', email: 'info@globalsol.com', status: 'Paused', leads: 2103, created: '2023-11-20' },
+        { id: '4', company: 'Digital Dynamics', email: 'team@digitaldyn.com', status: 'Active', leads: 542, created: '2024-03-12' },
+        { id: '5', company: 'Innovation Labs', email: 'contact@innolabs.com', status: 'Setup', leads: 0, created: '2024-03-15' }
       ],
-      selection: 'multiple',
-      rowAction: { id: 'edit', label: 'Edit' },
       filterable: true,
-      exportable: true
+      filterPlaceholder: 'Search clients...',
+      selection: 'multiple',
+      rowAction: { id: 'view', label: 'View' },
+      export: { formats: ['csv', 'xlsx'], filename: 'clients' },
+      maxHeight: '300px'
     },
     component: Table
   },

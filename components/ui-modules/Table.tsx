@@ -178,33 +178,38 @@ export function Table({
   }, [onChange]);
 
   const handleRowSelection = useCallback((rowId: string, checked: boolean) => {
-    const newSelection = new Set(selectedRows);
-    
-    if (checked) {
-      newSelection.add(rowId);
-    } else {
-      newSelection.delete(rowId);
-    }
-    
-    setSelectedRows(newSelection);
-    
     if (selection === 'single') {
+      // For single selection, clear all others and set only this one
+      const newSelection = checked ? new Set([rowId]) : new Set<string>();
+      setSelectedRows(newSelection);
       onChange?.({ selection: checked ? rowId : null });
     } else if (selection === 'multiple') {
+      // For multiple selection, toggle the specific row
+      const newSelection = new Set(selectedRows);
+      if (checked) {
+        newSelection.add(rowId);
+      } else {
+        newSelection.delete(rowId);
+      }
+      setSelectedRows(newSelection);
       onChange?.({ selection: Array.from(newSelection) });
     }
   }, [selectedRows, selection, onChange]);
 
-  const handleSelectAll = useCallback((checked: boolean) => {
-    if (checked) {
+  const handleSelectAll = useCallback((checked: boolean | "indeterminate") => {
+    const currentlyAllSelected = paginatedData.length > 0 && paginatedData.every(row => selectedRows.has(row.id));
+    
+    if (checked === true || (checked !== false && !currentlyAllSelected)) {
+      // Select all when checking or when indeterminate state is clicked
       const allIds = new Set(paginatedData.map(row => row.id));
       setSelectedRows(allIds);
       onChange?.({ selection: Array.from(allIds) });
     } else {
+      // Deselect all
       setSelectedRows(new Set());
       onChange?.({ selection: [] });
     }
-  }, [paginatedData, onChange]);
+  }, [paginatedData, onChange, selectedRows]);
 
   const handlePageChange = useCallback((page: number) => {
     setCurrentPage(page);
@@ -252,8 +257,8 @@ export function Table({
   const isAllSelected = paginatedData.length > 0 && paginatedData.every(row => selectedRows.has(row.id));
   const isSomeSelected = paginatedData.some(row => selectedRows.has(row.id));
   
-  // Fix indeterminate prop - should be true or undefined, never false
-  const indeterminateValue = (isSomeSelected && !isAllSelected) ? true : undefined;
+  // Indeterminate state: some but not all selected
+  const isIndeterminate = isSomeSelected && !isAllSelected;
 
   return (
     <div className="space-y-6">
@@ -332,7 +337,7 @@ export function Table({
         </Alert>
       )}
 
-      <div className="border rounded-lg overflow-hidden shadow-lg bg-card">
+      <div className="border rounded-lg overflow-hidden bg-card">
         <ScrollArea style={{ maxHeight }} className="w-full">
           {loading ? (
             <div className="p-8 text-center">
@@ -344,6 +349,92 @@ export function Table({
                 {filter ? `No results found for "${filter}"` : (empty || 'No data available')}
               </p>
             </div>
+          ) : selection === 'single' ? (
+            <RadioGroup
+              value={Array.from(selectedRows)[0] || ''}
+              onValueChange={(value) => handleRowSelection(value, true)}
+            >
+              <table className="w-full">
+                <thead className="bg-muted/50 sticky top-0 z-10">
+                  <tr className="border-b">
+                    {/* Selection Column */}
+                    <th className="w-12 p-3 text-left"></th>
+
+                    {/* Data Columns */}
+                    {columns.map((column) => (
+                      <th
+                        key={column.key}
+                        className={`p-3 font-medium ${
+                          column.type === 'number' ? 'text-right' : 'text-left'
+                        }`}
+                        style={{ width: column.width }}
+                      >
+                        {column.sortable ? (
+                          <span 
+                            onClick={() => handleSort(column.key)}
+                            className="font-medium cursor-pointer hover:text-foreground/80 transition-colors flex items-center gap-2"
+                          >
+                            {column.label}
+                            {getSortIcon(column.key)}
+                          </span>
+                        ) : (
+                          <span className="font-medium">{column.label}</span>
+                        )}
+                      </th>
+                    ))}
+
+                    {/* Action Column */}
+                    {rowAction && (
+                      <th className="w-20 p-3 text-right">
+                        <span className="font-medium flex items-center justify-end">Actions</span>
+                      </th>
+                    )}
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginatedData.map((row, index) => (
+                    <tr 
+                      key={row.id || index} 
+                      className="border-b hover:bg-muted/50 transition-colors cursor-pointer"
+                      onClick={() => {
+                        handleRowSelection(row.id, !selectedRows.has(row.id));
+                      }}
+                    >
+                      {/* Selection Column */}
+                      <td className="p-3" onClick={(e) => e.stopPropagation()}>
+                        <RadioGroupItem value={row.id} />
+                      </td>
+
+                      {/* Data Columns */}
+                      {columns.map((column) => (
+                        <td 
+                          key={column.key} 
+                          className={`p-3 ${
+                            column.type === 'number' ? 'text-right' : 'text-left'
+                          }`}
+                        >
+                          {formatCellValue(row[column.key], column)}
+                        </td>
+                      ))}
+
+                      {/* Action Column */}
+                      {rowAction && (
+                        <td className="p-3 text-right" onClick={(e) => e.stopPropagation()}>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => handleRowAction(row)}
+                            className="h-6 px-2 text-xs"
+                          >
+                            {rowAction.label}
+                          </Button>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </RadioGroup>
           ) : (
             <table className="w-full">
               <thead className="bg-muted/50 sticky top-0 z-10">
@@ -353,9 +444,8 @@ export function Table({
                     <th className="w-12 p-3 text-left">
                       {selection === 'multiple' && (
                         <Checkbox
-                          checked={isAllSelected}
+                          checked={isIndeterminate ? "indeterminate" : isAllSelected}
                           onCheckedChange={handleSelectAll}
-                          indeterminate={indeterminateValue}
                         />
                       )}
                     </th>
@@ -365,65 +455,71 @@ export function Table({
                   {columns.map((column) => (
                     <th
                       key={column.key}
-                      className="p-3 text-left font-medium"
+                      className={`p-3 font-medium ${
+                        column.type === 'number' ? 'text-right' : 'text-left'
+                      }`}
                       style={{ width: column.width }}
                     >
                       {column.sortable ? (
-                        <Button
-                          variant="ghost"
-                          size="sm"
+                        <span 
                           onClick={() => handleSort(column.key)}
-                          className="h-auto p-0 font-medium hover:bg-transparent gap-2"
+                          className="font-medium cursor-pointer hover:text-foreground/80 transition-colors flex items-center gap-2"
                         >
                           {column.label}
                           {getSortIcon(column.key)}
-                        </Button>
+                        </span>
                       ) : (
-                        column.label
+                        <span className="font-medium">{column.label}</span>
                       )}
                     </th>
                   ))}
 
                   {/* Action Column */}
                   {rowAction && (
-                    <th className="w-20 p-3 text-right">Action</th>
+                    <th className="w-20 p-3 text-right">
+                      <span className="font-medium flex items-center justify-end">Actions</span>
+                    </th>
                   )}
                 </tr>
               </thead>
               <tbody>
                 {paginatedData.map((row, index) => (
-                  <tr key={row.id || index} className="border-b hover:bg-muted/25 transition-colors">
+                  <tr 
+                    key={row.id || index} 
+                    className="border-b hover:bg-muted/50 transition-colors cursor-pointer"
+                    onClick={() => {
+                      if (selection !== 'none') {
+                        handleRowSelection(row.id, !selectedRows.has(row.id));
+                      }
+                    }}
+                  >
                     {/* Selection Column */}
                     {selection !== 'none' && (
-                      <td className="p-3">
-                        {selection === 'single' ? (
-                          <RadioGroup
-                            value={selectedRows.has(row.id) ? row.id : ''}
-                            onValueChange={(value) => handleRowSelection(row.id, value === row.id)}
-                          >
-                            <RadioGroupItem value={row.id} />
-                          </RadioGroup>
-                        ) : (
-                          <Checkbox
-                            checked={selectedRows.has(row.id)}
-                            onCheckedChange={(checked) => handleRowSelection(row.id, !!checked)}
-                          />
-                        )}
+                      <td className="p-3" onClick={(e) => e.stopPropagation()}>
+                        <Checkbox
+                          checked={selectedRows.has(row.id)}
+                          onCheckedChange={(checked) => handleRowSelection(row.id, !!checked)}
+                        />
                       </td>
                     )}
 
                     {/* Data Columns */}
                     {columns.map((column) => (
-                      <td key={column.key} className="p-3">
+                      <td 
+                        key={column.key} 
+                        className={`p-3 ${
+                          column.type === 'number' ? 'text-right' : 'text-left'
+                        }`}
+                      >
                         {formatCellValue(row[column.key], column)}
                       </td>
                     ))}
 
                     {/* Action Column */}
                     {rowAction && (
-                      <td className="p-3 text-right">
+                      <td className="p-3 text-right" onClick={(e) => e.stopPropagation()}>
                         <Button
-                          variant="ghost"
+                          variant="secondary"
                           size="sm"
                           onClick={() => handleRowAction(row)}
                           className="h-6 px-2 text-xs"
