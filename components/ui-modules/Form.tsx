@@ -710,7 +710,7 @@ export function Form({
     }`}>
       {/* Header */}
       {(title || description) && (
-        <div className="space-y-2">
+        <div className="space-y-1">
           {title && (
             <div className="flex items-center gap-2">
               <h3 className="text-lg font-medium">{title}</h3>

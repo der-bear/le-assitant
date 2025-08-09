@@ -20,7 +20,18 @@ import {
   RotateCcw,
   DollarSign,
   Palette,
-  ArrowLeft
+  ArrowLeft,
+  Sparkles,
+  CreditCard,
+  BarChart3,
+  FileBarChart,
+  Download,
+  History,
+  Mail,
+  Bell,
+  Plug,
+  Key,
+  Settings
 } from 'lucide-react';
 
 const toolCategories = [
@@ -99,6 +110,90 @@ const toolCategories = [
         title: 'Billing Management',
         description: 'Manage billing and invoicing',
         icon: <FileText className="w-4 h-4" />
+      },
+      {
+        id: 'payment-tracking',
+        title: 'Payment Tracking',
+        description: 'Track client payments and invoices',
+        icon: <CreditCard className="w-4 h-4" />
+      }
+    ]
+  },
+  {
+    id: 'reports',
+    title: 'Reports & Analytics',
+    items: [
+      {
+        id: 'performance-dashboard',
+        title: 'Performance Dashboard',
+        description: 'Real-time performance metrics and KPIs',
+        icon: <BarChart3 className="w-4 h-4" />
+      },
+      {
+        id: 'custom-reports',
+        title: 'Custom Reports',
+        description: 'Build and schedule custom reports',
+        icon: <FileBarChart className="w-4 h-4" />
+      },
+      {
+        id: 'export-data',
+        title: 'Export Data',
+        description: 'Export data in various formats',
+        icon: <Download className="w-4 h-4" />
+      },
+      {
+        id: 'audit-logs',
+        title: 'Audit Logs',
+        description: 'System activity and audit trails',
+        icon: <History className="w-4 h-4" />
+      }
+    ]
+  },
+  {
+    id: 'comms',
+    title: 'Communications',
+    items: [
+      {
+        id: 'email-campaigns',
+        title: 'Email Campaigns',
+        description: 'Create and manage email campaigns',
+        icon: <Mail className="w-4 h-4" />
+      },
+      {
+        id: 'notifications',
+        title: 'Notifications',
+        description: 'Configure system notifications',
+        icon: <Bell className="w-4 h-4" />
+      }
+    ]
+  },
+  {
+    id: 'system',
+    title: 'System Settings',
+    items: [
+      {
+        id: 'user-management',
+        title: 'User Management',
+        description: 'Manage users and permissions',
+        icon: <Users className="w-4 h-4" />
+      },
+      {
+        id: 'integrations',
+        title: 'Integrations',
+        description: 'Configure third-party integrations',
+        icon: <Plug className="w-4 h-4" />
+      },
+      {
+        id: 'api-configuration',
+        title: 'API Configuration',
+        description: 'Manage API keys and webhooks',
+        icon: <Key className="w-4 h-4" />
+      },
+      {
+        id: 'system-settings',
+        title: 'System Settings',
+        description: 'Global system configuration',
+        icon: <Settings className="w-4 h-4" />
       }
     ]
   }
@@ -275,7 +370,7 @@ export default function App() {
         <header className="border-b bg-background px-6 py-3 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-6 h-6 bg-foreground rounded flex items-center justify-center">
-              <Database className="w-3 h-3 text-background" />
+              <Sparkles className="w-3 h-3 text-background" />
             </div>
             <h1 className="font-medium text-base">LeadExec AI Assistant</h1>
             <Badge variant="secondary" className="text-xs px-2 py-0.5 font-normal">Beta</Badge>

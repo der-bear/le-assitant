@@ -208,77 +208,48 @@ export function SummaryCard({
         </Alert>
       )}
 
-      {/* Summary Overview */}
-      {!compact && Object.keys(statusCounts).length > 1 && (
-        <Card className="p-4">
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-muted-foreground">Summary</span>
-            <div className="flex gap-3 text-xs">
-              {statusCounts.success && (
-                <span className="text-green-600">{statusCounts.success} successful</span>
-              )}
-              {statusCounts.warning && (
-                <span className="text-yellow-600">{statusCounts.warning} warnings</span>
-              )}
-              {statusCounts.error && (
-                <span className="text-destructive">{statusCounts.error} errors</span>
-              )}
-              {statusCounts.info && (
-                <span className="text-blue-600">{statusCounts.info} info</span>
-              )}
-            </div>
-          </div>
-        </Card>
-      )}
 
-      <Card className="divide-y shadow-lg bg-card border">
+      <div className="space-y-3">
         {items.map((item, index) => (
           <div
             key={item.id}
-            className={`p-4 ${
-              item.link || onItemClick 
-                ? 'cursor-pointer hover:bg-accent transition-colors' 
-                : ''
-            }`}
-            onClick={() => handleItemClick(item)}
+            className="border border-border rounded-lg bg-card p-4 hover:border-muted-foreground/50 hover:shadow-sm transition-all duration-200"
           >
-            <div className="flex items-start gap-3">
-              {/* Status Icon */}
-              <div className="mt-0.5 flex-shrink-0">
-                {getStatusIcon(item.status)}
-              </div>
-
-              {/* Content */}
+            <div className="flex items-center justify-between gap-4">
+              {/* Left side: Content */}
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <h4 className="font-medium">{item.title}</h4>
-                  {compact && getStatusBadge(item.status)}
-                  {item.link && <ExternalLink className="w-3 h-3 text-muted-foreground" />}
+                <h4 className="font-medium text-foreground mb-1">{item.title}</h4>
+                <div className="flex items-center gap-2 text-sm">
+                  {item.subtitle && <span className="text-muted-foreground">{item.subtitle}</span>}
+                  {item.message && item.subtitle && <span className="text-muted-foreground">•</span>}
+                  {item.message && (
+                    <span className={
+                      item.status === 'success' ? 'text-green-600' :
+                      item.status === 'error' ? 'text-destructive' :
+                      item.status === 'warning' ? 'text-yellow-600' :
+                      'text-blue-600'
+                    }>
+                      {item.message}
+                    </span>
+                  )}
                 </div>
-
-                {item.subtitle && (
-                  <p className="text-sm text-muted-foreground mb-1">{item.subtitle}</p>
-                )}
-
-                {item.message && (
-                  <p className="text-sm">{item.message}</p>
-                )}
-
-                {!compact && (
-                  <div className="flex items-center justify-between mt-2">
-                    {getStatusBadge(item.status)}
-                    {item.link && (
-                      <span className="text-xs text-muted-foreground">
-                        {item.link.label || 'View details'}
-                      </span>
-                    )}
-                  </div>
-                )}
               </div>
+
+              {/* Right side: Small "Open" button */}
+              {item.link && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleItemClick(item)}
+                  className="h-7 px-2 text-xs flex-shrink-0"
+                >
+                  Open
+                </Button>
+              )}
             </div>
           </div>
         ))}
-      </Card>
+      </div>
 
       {/* Actions */}
       {actions.length > 0 && (

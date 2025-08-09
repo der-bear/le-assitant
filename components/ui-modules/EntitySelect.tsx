@@ -62,7 +62,7 @@ export function EntitySelect({
   actions = [],
   mode = 'single',
   value,
-  placeholder = 'Search...',
+  placeholder = 'Search…',
   allowClear = true,
   options = [],
   remote = false,
@@ -85,7 +85,6 @@ export function EntitySelect({
   
   const debounceRef = useRef<NodeJS.Timeout>();
   const containerRef = useRef<HTMLDivElement>(null);
-  const scrollRef = useRef<HTMLDivElement>(null);
 
   // Initialize selected options from value
   useEffect(() => {
@@ -237,9 +236,8 @@ export function EntitySelect({
         </Alert>
       )}
 
-      <div className="border rounded-lg p-6 shadow-lg bg-card">
-        <div className="space-y-4">
-        {/* Main Input */}
+      {/* Main Input */}
+      <div className="space-y-4">
         <div ref={containerRef} className="relative">
           <div
             className="flex min-h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background cursor-pointer"
@@ -285,7 +283,7 @@ export function EntitySelect({
 
           {/* Dropdown */}
           {isOpen && (
-            <div className="absolute top-full left-0 right-0 z-50 mt-1 max-h-80 overflow-hidden rounded-md border bg-popover shadow-lg">
+            <div className="absolute top-full left-0 right-0 z-50 mt-1 rounded-md border bg-popover shadow-lg">
               {/* Search Input */}
               <div className="p-2 border-b">
                 <div className="relative">
@@ -293,7 +291,7 @@ export function EntitySelect({
                   <Input
                     value={query}
                     onChange={handleSearchChange}
-                    placeholder="Search options..."
+                    placeholder="Search…"
                     className="pl-7 h-8"
                     autoFocus
                   />
@@ -301,7 +299,7 @@ export function EntitySelect({
               </div>
 
               {/* Options List */}
-              <ScrollArea ref={scrollRef} className="max-h-64">
+              <ScrollArea className="max-h-64">
                 <div className="p-1">
                   {loading && !options.length ? (
                     <div className="space-y-1">
@@ -385,7 +383,6 @@ export function EntitySelect({
             ))}
           </div>
         )}
-        </div>
       </div>
     </div>
   );

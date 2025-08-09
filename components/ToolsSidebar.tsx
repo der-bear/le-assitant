@@ -77,10 +77,11 @@ export function ToolsSidebar({ onToolSelect, selectedTool, onClose }: ToolsSideb
     { id: 'revenue-reports', name: 'Revenue Reports', description: 'Generate revenue and financial reports', category: 'Analytics', icon: BarChart3 },
     { id: 'custom-reports', name: 'Custom Reports', description: 'Create custom business reports', category: 'Analytics', icon: FileText },
     
-    // System Settings
-    { id: 'system-settings', name: 'System Settings', description: 'Configure global system settings', category: 'Settings', icon: Settings },
-    { id: 'user-management', name: 'User Management', description: 'Manage team members and permissions', category: 'Settings', icon: Users },
-    { id: 'integrations', name: 'Integrations', description: 'Connect third-party services', category: 'Settings', icon: Globe }
+    // System Tools
+    { id: 'system-settings', name: 'System Settings', description: 'Configure global system settings', category: 'System', icon: Settings },
+    { id: 'user-management', name: 'User Management', description: 'Manage team members and permissions', category: 'System', icon: Users },
+    { id: 'integrations', name: 'Integrations', description: 'Connect third-party services', category: 'System', icon: Globe },
+    { id: 'audit-logs', name: 'Audit Logs', description: 'View system activity and audit logs', category: 'System', icon: FileText }
   ];
 
   const categories = ['all', ...Array.from(new Set(tools.map(tool => tool.category)))];
@@ -161,16 +162,22 @@ export function ToolsSidebar({ onToolSelect, selectedTool, onClose }: ToolsSideb
           </div>
           
           <div className="flex flex-wrap gap-1">
-            {categories.map(category => (
-              <Badge
-                key={category}
-                variant={selectedCategory === category ? "default" : "outline"}
-                className="cursor-pointer text-xs font-normal"
-                onClick={() => setSelectedCategory(category)}
-              >
-                {category === 'all' ? 'All' : category}
-              </Badge>
-            ))}
+            {categories.map(category => {
+              const count = category === 'all' 
+                ? tools.length 
+                : tools.filter(tool => tool.category === category).length;
+              
+              return (
+                <Badge
+                  key={category}
+                  variant={selectedCategory === category ? "default" : "outline"}
+                  className="cursor-pointer text-xs font-normal"
+                  onClick={() => setSelectedCategory(category)}
+                >
+                  {category === 'all' ? `All (${count})` : `${category} (${count})`}
+                </Badge>
+              );
+            })}
           </div>
         </div>
       </div>

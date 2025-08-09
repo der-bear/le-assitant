@@ -140,6 +140,8 @@ const componentExamples: ComponentExample[] = [
         { id: '4', company: 'Digital Dynamics', email: 'team@digitaldyn.com', status: 'Active', leads: 542, created: '2024-03-12' },
         { id: '5', company: 'Innovation Labs', email: 'contact@innolabs.com', status: 'Setup', leads: 0, created: '2024-03-15' }
       ],
+      pageable: true, // Force pagination for demo
+      pageSize: 3, // Small page size to show pagination
       filterable: true,
       filterPlaceholder: 'Search clients...',
       selection: 'multiple',
@@ -157,6 +159,7 @@ const componentExamples: ComponentExample[] = [
     props: {
       kind: 'metrics',
       title: 'Performance Overview',
+      description: 'Key performance indicators for your lead generation campaigns',
       metrics: [
         { id: 'leads', label: 'Total Leads', value: 1247, kind: 'number', change: 12.5 },
         { id: 'revenue', label: 'Revenue', value: 45670, kind: 'currency', change: -3.2 },
@@ -206,7 +209,8 @@ const componentExamples: ComponentExample[] = [
       accept: '.xlsx,.xls,.csv',
       multiple: false,
       maxSizeMb: 10,
-      note: 'Download our Excel template to ensure proper formatting'
+      templateUrl: '#template-download',
+      templateLabel: 'Download Template'
     },
     component: FileDrop
   },
@@ -305,7 +309,7 @@ const componentExamples: ComponentExample[] = [
       title: 'Select Clients',
       description: 'Search and select from your client list',
       mode: 'multiple',
-      placeholder: 'Search clients...',
+      placeholder: 'Search…',
       options: [
         { id: '1', label: 'Acme Corp', description: 'contact@acme.com' },
         { id: '2', label: 'TechStart Inc', description: 'hello@techstart.io' },
@@ -319,17 +323,17 @@ const componentExamples: ComponentExample[] = [
     component: EntitySelect
   },
   {
-    id: 'summarycard-results',
-    title: 'SummaryCard - Batch Results',
-    description: 'Summary of batch operation results',
+    id: 'summarycard-outcomes',
+    title: 'SummaryCard - Batch Outcomes',
+    description: 'Single/batch outcomes with deep links',
     module: 'SummaryCard',
     props: {
       kind: 'summary',
-      title: 'Bulk Upload Results',
-      description: 'Summary of client import operation',
+      title: 'Client Import Results',
+      description: 'Batch operation outcomes with navigation links',
       items: [
-        { id: '1', title: 'Acme Corp', subtitle: 'contact@acme.com', status: 'success', message: 'Created successfully' },
-        { id: '2', title: 'TechStart Inc', subtitle: 'hello@techstart.io', status: 'success', message: 'Created successfully' },
+        { id: '1', title: 'Acme Corp', subtitle: 'contact@acme.com', status: 'success', message: 'Created successfully', link: { href: '#client-acme', label: 'Open' } },
+        { id: '2', title: 'TechStart Inc', subtitle: 'hello@techstart.io', status: 'success', message: 'Created successfully', link: { href: '#client-techstart', label: 'Open' } },
         { id: '3', title: 'Bad Data Co', subtitle: 'invalid-email', status: 'error', message: 'Invalid email format' },
         { id: '4', title: 'Global Solutions', subtitle: 'info@globalsol.com', status: 'warning', message: 'Duplicate found, skipped' }
       ],
@@ -340,6 +344,42 @@ const componentExamples: ComponentExample[] = [
       ]
     },
     component: SummaryCard
+  },
+  {
+    id: 'helpsources-cards',
+    title: 'HelpSources - Help Cards',
+    description: 'Help articles displayed as outline cards',
+    module: 'HelpSources',
+    props: {
+      kind: 'help-sources',
+      results: [
+        { 
+          id: '1', 
+          title: 'Setting up Facebook Lead Ads', 
+          description: 'Complete guide to configuring Facebook lead generation campaigns and connecting them to your CRM system.',
+          url: '#facebook-leads',
+          kind: 'howto',
+          source: 'KnowledgeBase'
+        },
+        { 
+          id: '2', 
+          title: 'Google Ads Integration API', 
+          description: 'Technical documentation for integrating Google Ads leads using our REST API endpoints.',
+          url: '#google-ads-api',
+          kind: 'api',
+          source: 'API Docs'
+        },
+        { 
+          id: '3', 
+          title: 'Webhook Configuration Guide', 
+          description: 'Step-by-step instructions for setting up real-time lead delivery via webhooks.',
+          url: '#webhook-setup',
+          kind: 'article',
+          source: 'KnowledgeBase'
+        }
+      ]
+    },
+    component: HelpSources
   },
   {
     id: 'processstate-creating',
@@ -457,8 +497,8 @@ export function ComponentGallery() {
                   </Card>
                 ) : (
                   (() => {
-                    // Check if component needs wrapper (Alert and ProcessState don't)
-                    const needsWrapper = example.module !== 'Alert' && example.module !== 'ProcessState';
+                    // Check if component needs wrapper (Alert, ProcessState, and EntitySelect don't)
+                    const needsWrapper = example.module !== 'Alert' && example.module !== 'ProcessState' && example.module !== 'EntitySelect';
                     
                     if (needsWrapper) {
                       return (
@@ -469,7 +509,7 @@ export function ComponentGallery() {
                         </Card>
                       );
                     } else {
-                      // Render Alert and ProcessState with no wrapper at all
+                      // Render Alert, ProcessState, and EntitySelect with no wrapper at all
                       return renderExample(example);
                     }
                   })()

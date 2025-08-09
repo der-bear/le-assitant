@@ -10,6 +10,7 @@ import { Alert } from './ui-modules/Alert';
 import { ProcessState } from './ui-modules/ProcessState';
 import { SummaryCard } from './ui-modules/SummaryCard';
 import { FileDrop } from './ui-modules/FileDrop';
+import { HelpSources } from './ui-modules/HelpSources';
 import { 
   Send, 
   User, 
@@ -18,7 +19,7 @@ import {
   Wrench,
   ArrowRight,
   Bot,
-  RotateCcw
+  ExternalLink
 } from 'lucide-react';
 
 interface Message {
@@ -45,7 +46,6 @@ export function ConversationalChat({
   selectedTool, 
   onToolProcessed, 
   onShowAllTools,
-  onStartOver,
   onWelcomeComplete,
   resetTrigger
 }: ConversationalChatProps) {
@@ -203,7 +203,7 @@ export function ConversationalChat({
   const WelcomeCards = useCallback(() => (
     <div className="space-y-6">
       {/* Quick Tiles Grid - responsive layout with horizontal icons on mobile */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 md:gap-3">
         {quickTiles.map(tile => (
           <Card
             key={tile.id}
@@ -215,7 +215,7 @@ export function ConversationalChat({
             onClick={() => !flowActive && handleToolSelection(tile.id)}
           >
             {/* Mobile: horizontal layout, Desktop: vertical layout */}
-            <div className="flex md:flex-col md:space-y-3 space-x-3 md:space-x-0 items-start">
+            <div className="flex sm:flex-col sm:space-y-3 space-x-3 sm:space-x-0 items-start">
               <div className={`rounded-lg bg-muted flex items-center justify-center flex-shrink-0 transition-colors ${
                 flowActive 
                   ? 'w-8 h-8' 
@@ -223,9 +223,9 @@ export function ConversationalChat({
               }`}>
                 {tile.icon}
               </div>
-              <div className="space-y-1 md:space-y-2 text-left flex-1 min-w-0">
-                <h3 className="font-medium text-sm md:text-base text-foreground leading-tight">{tile.title}</h3>
-                <p className="text-xs md:text-sm text-muted-foreground font-normal leading-relaxed">{tile.description}</p>
+              <div className="space-y-1 text-left flex-1 min-w-0">
+                <h3 className="font-medium text-sm text-foreground leading-tight">{tile.title}</h3>
+                <p className="text-xs text-muted-foreground font-normal leading-relaxed">{tile.description}</p>
               </div>
             </div>
           </Card>
@@ -262,43 +262,176 @@ export function ConversationalChat({
     scrollToBottom();
   }, [messages, scrollToBottom]);
 
+  const handleUnimplementedTool = useCallback((toolId: string) => {
+    // Tool category mapping
+    const toolCategories: Record<string, { category: string; alternativeTools: Array<{id: string, name: string, description: string}> }> = {
+      // Client tools
+      'client-management': { 
+        category: 'Clients',
+        alternativeTools: [
+          { id: 'create-new-client', name: 'LeadExec Client Setup', description: 'Create new client configurations with guided setup' },
+          { id: 'bulk-client-upload', name: 'Bulk Client Upload', description: 'Upload multiple clients at once via Excel' },
+          { id: 'delivery-configuration', name: 'Delivery Configuration', description: 'Configure email, webhook, and FTP delivery' }
+        ]
+      },
+      'client-search-filter': {
+        category: 'Clients', 
+        alternativeTools: [
+          { id: 'client-management', name: 'Client Management', description: 'View, edit, and manage existing clients' },
+          { id: 'create-new-client', name: 'LeadExec Client Setup', description: 'Create new client configurations with guided setup' }
+        ]
+      },
+      'delivery-configuration': {
+        category: 'Clients',
+        alternativeTools: [
+          { id: 'create-new-client', name: 'LeadExec Client Setup', description: 'Create new client configurations with guided setup' },
+          { id: 'client-management', name: 'Client Management', description: 'View, edit, and manage existing clients' }
+        ]
+      },
+      // Lead tools
+      'lead-sources': {
+        category: 'Leads',
+        alternativeTools: [
+          { id: 'lead-distribution', name: 'Lead Distribution', description: 'Configure lead routing and distribution' },
+          { id: 'lead-tracking', name: 'Lead Tracking', description: 'Track lead delivery and conversion' }
+        ]
+      },
+      // Financial tools
+      'revenue-reports': {
+        category: 'Financial',
+        alternativeTools: [
+          { id: 'billing-management', name: 'Billing Management', description: 'Manage billing and invoicing' },
+          { id: 'payment-tracking', name: 'Payment Tracking', description: 'Track client payments and invoices' }
+        ]
+      },
+      // System tools
+      'user-management': {
+        category: 'System',
+        alternativeTools: [
+          { id: 'system-settings', name: 'System Settings', description: 'Global system configuration' },
+          { id: 'integrations', name: 'Integrations', description: 'Configure third-party integrations' }
+        ]
+      }
+    };
+
+    const toolInfo = toolCategories[toolId] || { category: 'General', alternativeTools: [] };
+    const toolDisplayName = toolId.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+
+    // Create help sources based on tool category
+    const helpSources: Record<string, Array<{id: string, title: string, description: string, url: string, kind: 'howto' | 'article' | 'api', source: 'KnowledgeBase' | 'API Docs'}>> = {
+      'Clients': [
+        { id: '1', title: 'Client Setup Guide', description: 'Complete walkthrough for setting up new clients in LeadExec', url: '#client-setup', kind: 'howto' as const, source: 'KnowledgeBase' as const },
+        { id: '2', title: 'Delivery Methods Explained', description: 'Understanding email, webhook, and FTP delivery options', url: '#delivery-methods', kind: 'article' as const, source: 'KnowledgeBase' as const },
+        { id: '3', title: 'Client API Reference', description: 'API endpoints for programmatic client management', url: '#client-api', kind: 'api' as const, source: 'API Docs' as const }
+      ],
+      'Leads': [
+        { id: '1', title: 'Lead Source Configuration', description: 'How to set up and configure lead sources', url: '#lead-sources', kind: 'howto' as const, source: 'KnowledgeBase' as const },
+        { id: '2', title: 'Lead Distribution Rules', description: 'Creating routing rules for optimal lead distribution', url: '#lead-distribution', kind: 'article' as const, source: 'KnowledgeBase' as const },
+        { id: '3', title: 'Lead Tracking Guide', description: 'Monitor lead performance and conversion rates', url: '#lead-tracking', kind: 'howto' as const, source: 'KnowledgeBase' as const }
+      ],
+      'Financial': [
+        { id: '1', title: 'Revenue Reporting Guide', description: 'Generate and analyze revenue reports', url: '#revenue-reports', kind: 'howto' as const, source: 'KnowledgeBase' as const },
+        { id: '2', title: 'Billing Management', description: 'Handle client invoicing and payment tracking', url: '#billing', kind: 'article' as const, source: 'KnowledgeBase' as const },
+        { id: '3', title: 'Financial API', description: 'Integrate with financial systems via API', url: '#financial-api', kind: 'api' as const, source: 'API Docs' as const }
+      ],
+      'System': [
+        { id: '1', title: 'User Management Guide', description: 'Add users and configure permissions', url: '#user-management', kind: 'howto' as const, source: 'KnowledgeBase' as const },
+        { id: '2', title: 'Integration Setup', description: 'Connect third-party services and APIs', url: '#integrations', kind: 'article' as const, source: 'KnowledgeBase' as const },
+        { id: '3', title: 'System Configuration', description: 'Global settings and system preferences', url: '#system-config', kind: 'howto' as const, source: 'KnowledgeBase' as const }
+      ],
+      'General': [
+        { id: '1', title: 'Getting Started with LeadExec', description: 'Overview of key features and workflows', url: '#getting-started', kind: 'article' as const, source: 'KnowledgeBase' as const },
+        { id: '2', title: 'API Documentation', description: 'Complete API reference for developers', url: '#api-docs', kind: 'api' as const, source: 'API Docs' as const }
+      ]
+    };
+
+    // Main response message with suggested actions below
+    const suggestionButtons = toolInfo.alternativeTools.length > 0 ? (
+      <div className="flex flex-wrap gap-2">
+        {toolInfo.alternativeTools.slice(0, 3).map((tool) => (
+          <Button
+            key={tool.id}
+            variant="outline"
+            size="sm"
+            onClick={() => handleToolSelection(tool.id)}
+            className="h-8 px-3 text-xs"
+          >
+            {tool.name}
+          </Button>
+        ))}
+      </div>
+    ) : null;
+
+    addMessage(
+      `The "${toolDisplayName}" tool isn't implemented yet, but I can assist you with the configuration. I can still help you configure this manually - just describe what you'd like to set up, and I'll guide you through the process.`,
+      'assistant',
+      suggestionButtons
+    );
+
+    // Help sources as separate message
+    schedule(() => {
+      addMessage(
+        `Here are some helpful resources that can guide you through ${toolInfo.category.toLowerCase()} configuration and best practices:`,
+        'assistant',
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
+          {(helpSources[toolInfo.category] || helpSources['General']).map((source) => (
+            <div
+              key={source.id}
+              className="p-4 border border-border rounded-lg hover:bg-accent/50 cursor-pointer transition-all duration-200 group"
+              onClick={() => window.open(source.url, '_blank', 'noopener,noreferrer')}
+            >
+              <div className="flex flex-col h-full">
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <span className="text-xs text-muted-foreground capitalize">
+                    {source.kind}
+                  </span>
+                  <ExternalLink className="w-3 h-3 text-muted-foreground group-hover:text-foreground transition-colors flex-shrink-0" />
+                </div>
+                
+                <div className="flex-1">
+                  <h3 className="text-sm font-medium text-foreground group-hover:text-foreground transition-colors mb-1">
+                    {source.title}
+                  </h3>
+                  <p className="text-xs text-muted-foreground line-clamp-2">
+                    {source.description}
+                  </p>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      );
+    }, 300);
+  }, [addMessage]);
+
   const startGuidedFlow = useCallback((flowId: string) => {
     if (flowId === 'create-new-client') {
       handleClientSetup();
     } else if (flowId === 'bulk-client-upload') {
       handleBulkUpload();
     } else {
-      addMessage(
-        `${flowId} tool is being prepared. This guided workflow will be available soon.`,
-        'assistant'
-      );
+      handleUnimplementedTool(flowId);
     }
-  }, [addMessage]);
+  }, []);
 
   const handleToolSelection = useCallback((toolId: string) => {
+    // Special handling for All Tools - just open the panel, no flow
+    if (toolId === 'all-tools') {
+      onShowAllTools?.();
+      return;
+    }
+    
     resetSession();
     setFlowActive(true);
     onWelcomeComplete?.();
 
     const toolNames: Record<string, string> = {
       'create-new-client': 'Create New Client',
-      'bulk-client-upload': 'Bulk Client Upload',
-      'all-tools': 'All Tools'
+      'bulk-client-upload': 'Bulk Client Upload'
     };
 
     const toolName = toolNames[toolId] || toolId;
     addMessage(`${toolName}`, 'user');
-
-    if (toolId === 'all-tools') {
-      onShowAllTools?.();
-      schedule(() => {
-        addMessage(
-          'The Quick Tools panel is now open. You can search and browse all available tools by category.',
-          'assistant'
-        );
-      }, 500);
-      return;
-    }
 
     setCurrentFlow(toolId);
     setCompletedSteps(new Set());
@@ -315,23 +448,29 @@ export function ConversationalChat({
   useEffect(() => {
     if (selectedTool && selectedTool !== lastProcessedToolRef.current) {
       lastProcessedToolRef.current = selectedTool;
+      // Special handling for All Tools - just open the panel
+      if (selectedTool === 'all-tools') {
+        onShowAllTools?.();
+        if (onToolProcessed) {
+          onToolProcessed();
+        }
+        return;
+      }
+      
       resetSession();
       setFlowActive(true);
       onWelcomeComplete?.();
       const toolNames: Record<string, string> = {
         'create-new-client': 'Create New Client',
-        'bulk-client-upload': 'Bulk Client Upload',
-        'all-tools': 'All Tools'
+        'bulk-client-upload': 'Bulk Client Upload'
       };
       const toolName = toolNames[selectedTool] || selectedTool;
       addMessage(`${toolName}`, 'user');
-      if (selectedTool === 'all-tools') {
-        onShowAllTools?.();
-      } else {
-        schedule(() => {
-          startGuidedFlow(selectedTool);
-        }, 500);
-      }
+      
+      schedule(() => {
+        startGuidedFlow(selectedTool);
+      }, 500);
+      
       if (onToolProcessed) {
         onToolProcessed();
       }
@@ -1159,9 +1298,20 @@ export function ConversationalChat({
                     
                     {message.component && (
                       (() => {
-                        // Check if component is ProcessState or Alert (no wrapper needed)
+                        // Check if component is ProcessState, Alert, or suggested actions/sources (no wrapper needed)
                         const componentType = (message.component as any)?.props?.kind;
-                        const needsWrapper = componentType !== 'process-state' && componentType !== 'alert';
+                        const isButtonGroup = React.isValidElement(message.component) && 
+                          message.component.type === 'div' && 
+                          message.component.props?.className?.includes('flex flex-wrap gap-2');
+                        const isSourcesList = React.isValidElement(message.component) && 
+                          message.component.type === 'div' && 
+                          (message.component.props?.className?.includes('space-y-2') ||
+                           message.component.props?.className?.includes('grid grid-cols-1'));
+                        
+                        const needsWrapper = componentType !== 'process-state' && 
+                                           componentType !== 'alert' && 
+                                           !isButtonGroup && 
+                                           !isSourcesList;
                         
                         if (needsWrapper) {
                           return (
@@ -1172,7 +1322,7 @@ export function ConversationalChat({
                             </div>
                           );
                         } else {
-                          // Render ProcessState and Alert without wrapper
+                          // Render without wrapper for ProcessState, Alert, suggested actions, and sources
                           return (
                             <div className="mt-4 sm:mt-6">
                               {message.component}

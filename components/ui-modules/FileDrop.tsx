@@ -234,182 +234,190 @@ export function FileDrop({
   }, []);
 
   return (
-    <Card className="max-w-2xl mx-auto bg-card border shadow-lg">
-      <div className="p-6 space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <h2 className="text-lg font-medium text-foreground">{title}</h2>
-            {helpUrl && (
-              <Button variant="ghost" size="sm" asChild className="h-4 w-4 p-0">
-                <a href={helpUrl} target="_blank" rel="noopener noreferrer">
-                  <HelpCircle className="h-3 w-3" />
-                </a>
-              </Button>
+    <div className="space-y-6">
+      {/* Header */}
+      {(title || description) && (
+        <div className="space-y-1">
+          {title && (
+            <div className="flex items-center gap-2">
+              <h3 className="font-medium">{title}</h3>
+              {helpUrl && (
+                <Button variant="ghost" size="sm" asChild className="h-4 w-4 p-0">
+                  <a href={helpUrl} target="_blank" rel="noopener noreferrer">
+                    <HelpCircle className="h-3 w-3" />
+                  </a>
+                </Button>
+              )}
+            </div>
+          )}
+          {description && (
+            <p className="text-sm text-muted-foreground">{description}</p>
+          )}
+        </div>
+      )}
+
+      {/* Error Alert */}
+      {error && (
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
+      {/* Main Drop Zone */}
+      <div
+        onDrop={handleDrop}
+        onDragOver={handleDragOver}
+        onDragEnter={handleDragEnter}
+        onDragLeave={handleDragLeave}
+        onClick={handleBrowse}
+        className={`relative border-2 border-dashed rounded-lg p-8 text-center transition-all cursor-pointer bg-card ${
+          isDragging 
+            ? 'border-primary bg-primary/5' 
+            : 'border-border hover:border-muted-foreground/50 hover:bg-muted/20'
+        } ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
+      >
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept={accept}
+          multiple={multiple}
+          onChange={handleFileInput}
+          className="hidden"
+          disabled={loading}
+        />
+
+        <div className="space-y-3">
+          {/* Upload Icon */}
+          <div className="flex justify-center">
+            <Upload className="w-6 h-6 text-muted-foreground" strokeWidth={1.5} />
+          </div>
+          
+          {/* Main Message */}
+          <div className="space-y-1">
+            <p className="text-sm font-medium text-foreground">
+              {isDragging ? 'Drop files here' : 'Upload files'}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Drag and drop or click to browse
+            </p>
+          </div>
+          
+          {/* File Format Info */}
+          {(accept || maxSizeMb) && (
+            <div className="flex flex-wrap justify-center gap-2 text-xs text-muted-foreground">
+              {accept && (
+                <span>{formatAcceptedTypes(accept)}</span>
+              )}
+              {accept && maxSizeMb && <span>•</span>}
+              {maxSizeMb && (
+                <span>Max {maxSizeMb}MB</span>
+              )}
+            </div>
+          )}
+          
+          {/* Additional Note */}
+          {note && (
+            <div className="mt-3 pt-3 border-t border-border">
+              <p className="text-xs text-muted-foreground">{note}</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Template Download */}
+      {templateUrl && (
+        <div className="flex justify-center">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleTemplateDownload}
+            className="h-8 px-4 text-sm gap-2"
+            type="button"
+          >
+            <Download className="w-4 h-4" />
+            {templateLabel}
+          </Button>
+        </div>
+      )}
+
+      {/* Files List */}
+      {hasFiles && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h4 className="text-sm font-medium">Files ({files.length})</h4>
+            {hasErrors && (
+              <Badge variant="destructive" className="text-xs">
+                {files.filter(f => f.status === 'error').length} failed
+              </Badge>
             )}
           </div>
           
-          {templateUrl && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleTemplateDownload}
-              className="h-8 px-3 text-sm font-medium gap-2"
-            >
-              <Download className="w-3 h-3" />
-              {templateLabel}
-            </Button>
-          )}
-        </div>
-
-        {/* Description */}
-        {description && (
-          <p className="text-sm text-muted-foreground font-normal">{description}</p>
-        )}
-
-        {/* Error Alert */}
-        {error && (
-          <Alert variant="destructive">
-            <AlertDescription className="font-medium">{error}</AlertDescription>
-          </Alert>
-        )}
-
-        {/* Main Drop Zone */}
-        <div
-          onDrop={handleDrop}
-          onDragOver={handleDragOver}
-          onDragEnter={handleDragEnter}
-          onDragLeave={handleDragLeave}
-          onClick={handleBrowse}
-          className={`relative border-2 border-dashed rounded-lg p-12 text-center transition-all cursor-pointer ${
-            isDragging 
-              ? 'border-primary bg-primary/5' 
-              : 'border-border hover:border-muted-foreground/50'
-          } ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
-        >
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept={accept}
-            multiple={multiple}
-            onChange={handleFileInput}
-            className="hidden"
-            disabled={loading}
-          />
-
-          <div className="space-y-4">
-            {/* Upload Icon */}
-            <div className="flex justify-center">
-              <div className="w-12 h-12 flex items-center justify-center">
-                <Upload className="w-8 h-8 text-muted-foreground" strokeWidth={1.5} />
-              </div>
-            </div>
-            
-            {/* Main Message */}
-            <div className="space-y-2">
-              <p className="text-base font-medium text-foreground">
-                {isDragging ? 'Drop your Excel file here' : 'Drop your Excel file here'}
-              </p>
-              <p className="text-sm text-muted-foreground font-normal">
-                or click to browse files
-              </p>
-            </div>
-            
-            {/* File Format Badge */}
-            {accept && (
-              <div className="flex justify-center">
-                <Badge variant="secondary" className="text-xs px-3 py-1 font-normal">
-                  {formatAcceptedTypes(accept)}
-                </Badge>
-              </div>
-            )}
-          </div>
-
-          {/* Additional Note */}
-          {note && (
-            <div className="mt-6 pt-4 border-t border-border">
-              <p className="text-xs text-muted-foreground font-normal">{note}</p>
-            </div>
-          )}
-        </div>
-
-        {/* Files List - Compact when files are uploaded */}
-        {hasFiles && (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h4 className="text-sm font-medium text-foreground">Files ({files.length})</h4>
-              {hasErrors && (
-                <Badge variant="destructive" className="text-xs px-2 py-1">
-                  {files.filter(f => f.status === 'error').length} failed
-                </Badge>
-              )}
-            </div>
-            
-            <div className="space-y-2">
-              {files.map((uploadFile) => (
-                <div key={uploadFile.id} className="border border-border rounded-md p-3 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3 min-w-0">
-                      {getStatusIcon(uploadFile.status)}
-                      <div className="min-w-0 flex-1">
-                        <div className="text-sm font-medium text-foreground truncate">
-                          {uploadFile.file.name}
-                        </div>
-                        <div className="text-xs text-muted-foreground font-normal">
-                          {formatFileSize(uploadFile.file.size)}
-                          {uploadFile.file.type && ` • ${uploadFile.file.type}`}
-                        </div>
+          <div className="space-y-2">
+            {files.map((uploadFile) => (
+              <div key={uploadFile.id} className="border rounded-md p-3 space-y-2 bg-card">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 min-w-0">
+                    {getStatusIcon(uploadFile.status)}
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-medium truncate">
+                        {uploadFile.file.name}
                       </div>
-                    </div>
-                    
-                    <div className="flex items-center gap-2">
-                      {uploadFile.status === 'error' && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleRetryFile(uploadFile.id)}
-                          className="h-6 px-2 text-xs font-medium"
-                        >
-                          <RotateCcw className="w-3 h-3" />
-                        </Button>
-                      )}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleRemoveFile(uploadFile.id)}
-                        className="h-6 w-6 p-0"
-                      >
-                        <X className="w-3 h-3" />
-                      </Button>
+                      <div className="text-xs text-muted-foreground">
+                        {formatFileSize(uploadFile.file.size)}
+                      </div>
                     </div>
                   </div>
                   
-                  {uploadFile.status === 'uploading' && (
-                    <Progress value={uploadFile.progress} className="h-1" />
-                  )}
-                  
-                  {uploadFile.error && (
-                    <p className="text-xs text-destructive font-normal">{uploadFile.error}</p>
-                  )}
-                  
-                  {uploadFile.status === 'success' && uploadFile.result && (
-                    <div className="text-xs text-green-600 font-normal">
-                      Upload complete
-                    </div>
-                  )}
+                  <div className="flex items-center gap-1">
+                    {uploadFile.status === 'error' && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleRetryFile(uploadFile.id)}
+                        className="h-7 w-7 p-0"
+                        title="Retry"
+                      >
+                        <RotateCcw className="w-3 h-3" />
+                      </Button>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleRemoveFile(uploadFile.id)}
+                      className="h-7 w-7 p-0"
+                      title="Remove"
+                    >
+                      <X className="w-3 h-3" />
+                    </Button>
+                  </div>
                 </div>
-              ))}
-            </div>
+                
+                {uploadFile.status === 'uploading' && (
+                  <Progress value={uploadFile.progress} className="h-1" />
+                )}
+                
+                {uploadFile.error && (
+                  <p className="text-xs text-destructive">{uploadFile.error}</p>
+                )}
+                
+                {uploadFile.status === 'success' && uploadFile.result && (
+                  <div className="text-xs text-green-600">
+                    Upload complete
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Action Buttons */}
-        <div className="flex items-center gap-3 pt-2">
+      {/* Action Buttons */}
+      {hasFiles && (
+        <div className="flex items-center gap-2">
           <Button
-            variant="default"
             onClick={handleUploadAndProcess}
             disabled={loading || !hasValidFiles}
-            className="flex-1 h-10 font-medium gap-2"
+            className="gap-2"
           >
             <Upload className="w-4 h-4" />
             Upload & Process
@@ -419,29 +427,27 @@ export function FileDrop({
             variant="outline"
             onClick={handleCancel}
             disabled={loading}
-            className="h-10 px-6 font-medium"
           >
             Cancel
           </Button>
         </div>
+      )}
 
-        {/* Custom Actions */}
-        {actions.length > 0 && (
-          <div className="flex items-center gap-3 pt-2 border-t border-border">
-            {actions.map((action) => (
-              <Button
-                key={action.id}
-                variant={action.variant || 'outline'}
-                disabled={loading || action.disabled}
-                onClick={() => onAction?.(action.id)}
-                className="font-medium"
-              >
-                {action.label}
-              </Button>
-            ))}
-          </div>
-        )}
-      </div>
-    </Card>
+      {/* Custom Actions */}
+      {actions.length > 0 && (
+        <div className="flex items-center gap-2">
+          {actions.map((action) => (
+            <Button
+              key={action.id}
+              variant={action.variant || 'outline'}
+              disabled={loading || action.disabled}
+              onClick={() => onAction?.(action.id)}
+            >
+              {action.label}
+            </Button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

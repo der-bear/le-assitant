@@ -147,18 +147,22 @@ export function Chart({
     }
 
     return (
-      <div className="bg-popover border border-border rounded-lg shadow-lg p-3 text-sm font-medium">
-        <p className="text-foreground font-medium mb-2">{label}</p>
-        {payload.map((entry: any, index: number) => (
-          <div key={index} className="flex items-center gap-2 text-foreground">
-            <div 
-              className="w-3 h-3 rounded-sm" 
-              style={{ backgroundColor: entry.color }}
-            />
-            <span className="text-muted-foreground">{entry.name}:</span>
-            <span className="font-medium">{formatValue(entry.value)}</span>
-          </div>
-        ))}
+      <div className="bg-popover border border-border rounded-lg shadow-lg p-3 text-sm backdrop-blur-sm">
+        <p className="text-foreground font-semibold mb-2 text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
+        <div className="space-y-1">
+          {payload.map((entry: any, index: number) => (
+            <div key={index} className="flex items-center justify-between gap-3 min-w-[120px]">
+              <div className="flex items-center gap-2">
+                <div 
+                  className="w-3 h-3 rounded-sm shadow-sm" 
+                  style={{ backgroundColor: entry.color }}
+                />
+                <span className="text-foreground text-sm">{entry.name}</span>
+              </div>
+              <span className="text-foreground">{formatValue(entry.value)}</span>
+            </div>
+          ))}
+        </div>
       </div>
     );
   }, [formatValue]);
@@ -171,14 +175,16 @@ export function Chart({
 
     const data = payload[0];
     return (
-      <div className="bg-popover border border-border rounded-lg shadow-lg p-3 text-sm font-medium">
-        <div className="flex items-center gap-2 text-foreground">
-          <div 
-            className="w-3 h-3 rounded-sm" 
-            style={{ backgroundColor: data.payload.color }}
-          />
-          <span className="text-muted-foreground">{data.name}:</span>
-          <span className="font-medium">{formatValue(data.value)}</span>
+      <div className="bg-popover border border-border rounded-lg shadow-lg p-3 text-sm backdrop-blur-sm">
+        <div className="flex items-center justify-between gap-3 min-w-[120px]">
+          <div className="flex items-center gap-2">
+            <div 
+              className="w-3 h-3 rounded-sm shadow-sm" 
+              style={{ backgroundColor: data.payload.color }}
+            />
+            <span className="text-foreground text-sm">{data.name}</span>
+          </div>
+          <span className="text-foreground">{formatValue(data.value)}</span>
         </div>
       </div>
     );
@@ -241,14 +247,14 @@ export function Chart({
               <XAxis 
                 dataKey="name" 
                 stroke="hsl(var(--muted-foreground))"
-                fontSize={12}
+                fontSize={11}
                 fontWeight={400}
                 axisLine={{ stroke: 'hsl(var(--border))' }}
                 tickLine={{ stroke: 'hsl(var(--border))' }}
               />
               <YAxis 
                 stroke="hsl(var(--muted-foreground))"
-                fontSize={12}
+                fontSize={11}
                 fontWeight={400}
                 axisLine={{ stroke: 'hsl(var(--border))' }}
                 tickLine={{ stroke: 'hsl(var(--border))' }}
@@ -258,9 +264,9 @@ export function Chart({
               {showLegend && (
                 <Legend 
                   wrapperStyle={{ 
-                    fontSize: '14px', 
+                    fontSize: '12px', 
                     color: 'hsl(var(--foreground))',
-                    fontWeight: 500
+                    fontWeight: 400
                   }}
                 />
               )}
@@ -270,17 +276,17 @@ export function Chart({
                   type="monotone"
                   dataKey={serie.id}
                   stroke={serie.color || CHART_COLORS[index % CHART_COLORS.length]}
-                  strokeWidth={3}
+                  strokeWidth={2}
                   dot={{ 
-                    r: 5,
+                    r: 4,
                     fill: serie.color || CHART_COLORS[index % CHART_COLORS.length],
-                    strokeWidth: 2,
+                    strokeWidth: 1.5,
                     stroke: 'hsl(var(--background))'
                   }}
                   activeDot={{ 
-                    r: 7,
+                    r: 6,
                     fill: serie.color || CHART_COLORS[index % CHART_COLORS.length],
-                    strokeWidth: 2,
+                    strokeWidth: 1.5,
                     stroke: 'hsl(var(--background))'
                   }}
                   name={serie.label}
@@ -299,14 +305,14 @@ export function Chart({
               <XAxis 
                 dataKey="name" 
                 stroke="hsl(var(--muted-foreground))"
-                fontSize={12}
+                fontSize={11}
                 fontWeight={400}
                 axisLine={{ stroke: 'hsl(var(--border))' }}
                 tickLine={{ stroke: 'hsl(var(--border))' }}
               />
               <YAxis 
                 stroke="hsl(var(--muted-foreground))"
-                fontSize={12}
+                fontSize={11}
                 fontWeight={400}
                 axisLine={{ stroke: 'hsl(var(--border))' }}
                 tickLine={{ stroke: 'hsl(var(--border))' }}
@@ -316,9 +322,9 @@ export function Chart({
               {showLegend && (
                 <Legend 
                   wrapperStyle={{ 
-                    fontSize: '14px', 
+                    fontSize: '12px', 
                     color: 'hsl(var(--foreground))',
-                    fontWeight: 500
+                    fontWeight: 400
                   }}
                 />
               )}
@@ -348,10 +354,10 @@ export function Chart({
                 innerRadius={0}
                 fill="#8884d8"
                 dataKey="value"
-                label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                label={({ name, percent }) => `${name} ${((percent || 0) * 100).toFixed(0)}%`}
                 labelLine={false}
-                fontSize={12}
-                fontWeight={500}
+                fontSize={11}
+                fontWeight={400}
               >
                 {pieData.map((entry, index) => (
                   <Cell 
@@ -376,7 +382,7 @@ export function Chart({
     <div className="space-y-6">
       {/* Header */}
       {(title || description) && (
-        <div className="space-y-2">
+        <div className="space-y-1">
           {title && (
             <div className="flex items-center gap-2">
               <h3 className="font-medium text-foreground text-lg">{title}</h3>
@@ -478,7 +484,7 @@ export function Chart({
         </div>
       </div>
 
-      <Card className="p-6 bg-card border shadow-lg">
+      <Card className="p-3 bg-card border">
         {renderChart()}
       </Card>
     </div>

@@ -264,7 +264,7 @@ export function Table({
     <div className="space-y-6">
       {/* Header */}
       {(title || description) && (
-        <div className="space-y-2">
+        <div className="space-y-1">
           {title && (
             <div className="flex items-center gap-2">
               <h3 className="font-medium">{title}</h3>
@@ -395,7 +395,9 @@ export function Table({
                   {paginatedData.map((row, index) => (
                     <tr 
                       key={row.id || index} 
-                      className="border-b hover:bg-muted/50 transition-colors cursor-pointer"
+                      className={`border-b hover:bg-muted/30 transition-colors cursor-pointer ${
+                        index % 2 === 0 ? 'bg-background' : 'bg-muted/10'
+                      }`}
                       onClick={() => {
                         handleRowSelection(row.id, !selectedRows.has(row.id));
                       }}
@@ -486,7 +488,9 @@ export function Table({
                 {paginatedData.map((row, index) => (
                   <tr 
                     key={row.id || index} 
-                    className="border-b hover:bg-muted/50 transition-colors cursor-pointer"
+                    className={`border-b hover:bg-muted/30 transition-colors cursor-pointer ${
+                      index % 2 === 0 ? 'bg-background' : 'bg-muted/10'
+                    }`}
                     onClick={() => {
                       if (selection !== 'none') {
                         handleRowSelection(row.id, !selectedRows.has(row.id));
@@ -543,49 +547,27 @@ export function Table({
             Page {currentPage + 1} of {totalPages} ({sortedData.length} items)
           </div>
           
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
             <Button
               variant="outline"
               size="sm"
               onClick={() => handlePageChange(currentPage - 1)}
               disabled={currentPage === 0}
-              className="h-8 gap-1"
+              className="h-8 w-8 p-0"
+              title="Previous page"
             >
-              <ChevronLeft className="w-3 h-3" />
-              Previous
+              <ChevronLeft className="w-4 h-4" />
             </Button>
-            
-            <div className="flex gap-1">
-              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                const pageIndex = currentPage < 3 ? i : 
-                                currentPage > totalPages - 3 ? totalPages - 5 + i :
-                                currentPage - 2 + i;
-                
-                if (pageIndex < 0 || pageIndex >= totalPages) return null;
-                
-                return (
-                  <Button
-                    key={pageIndex}
-                    variant={pageIndex === currentPage ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => handlePageChange(pageIndex)}
-                    className="h-8 w-8 p-0"
-                  >
-                    {pageIndex + 1}
-                  </Button>
-                );
-              })}
-            </div>
             
             <Button
               variant="outline"
               size="sm"
               onClick={() => handlePageChange(currentPage + 1)}
               disabled={currentPage === totalPages - 1}
-              className="h-8 gap-1"
+              className="h-8 w-8 p-0"
+              title="Next page"
             >
-              Next
-              <ChevronRight className="w-3 h-3" />
+              <ChevronRight className="w-4 h-4" />
             </Button>
           </div>
         </div>

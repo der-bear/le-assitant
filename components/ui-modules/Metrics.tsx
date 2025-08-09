@@ -177,63 +177,55 @@ export function Metrics({
   return (
     <div className="space-y-6">
       {/* Header */}
-      {(title || description || exportable || actions.length > 0) && (
-        <div className="space-y-4">
-          {(title || description) && (
-            <div className="space-y-2">
-              {title && (
-                <div className="flex items-center gap-2">
-                  <h3 className="font-medium">{title}</h3>
-                  {helpUrl && (
-                    <Button variant="ghost" size="sm" asChild className="h-4 w-4 p-0">
-                      <a href={helpUrl} target="_blank" rel="noopener noreferrer">
-                        <HelpCircle className="h-3 w-3" />
-                      </a>
-                    </Button>
-                  )}
-                </div>
-              )}
-              {description && (
-                <p className="text-sm text-muted-foreground">{description}</p>
-              )}
-            </div>
-          )}
-
-          {/* Controls */}
-          {(exportable || actions.length > 0) && (
-            <div className="flex items-center justify-between">
-              <div></div>
+      {(title || description || helpUrl) && (
+        <div className="flex items-start justify-between gap-4">
+          <div className="space-y-1 flex-1">
+            {title && (
               <div className="flex items-center gap-2">
-                {/* Export */}
-                {exportable && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleExport}
-                    className="h-8 px-3 text-xs gap-2"
-                    title="Export metrics as PNG"
-                  >
-                    <Download className="w-3 h-3" />
-                    Export
+                <h3 className="font-medium">{title}</h3>
+                {helpUrl && (
+                  <Button variant="ghost" size="sm" asChild className="h-4 w-4 p-0">
+                    <a href={helpUrl} target="_blank" rel="noopener noreferrer">
+                      <HelpCircle className="h-3 w-3" />
+                    </a>
                   </Button>
                 )}
-
-                {/* Custom Actions */}
-                {actions.map((action) => (
-                  <Button
-                    key={action.id}
-                    variant={action.variant || 'outline'}
-                    size="sm"
-                    disabled={loading || action.disabled}
-                    onClick={() => onAction?.(action.id)}
-                    className="h-8 px-3 text-xs"
-                  >
-                    {action.label}
-                  </Button>
-                ))}
               </div>
-            </div>
-          )}
+            )}
+            {description && (
+              <p className="text-sm text-muted-foreground">{description}</p>
+            )}
+          </div>
+
+          {/* Export Button Inline */}
+          <div className="flex items-center gap-2">
+            {exportable && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExport}
+                className="h-8 px-3 text-xs gap-2"
+                title="Export metrics as PNG"
+              >
+                <Download className="w-3 h-3" />
+                Export
+              </Button>
+            )}
+
+            {/* Custom Actions */}
+            {actions.map((action) => (
+              <Button
+                key={action.id}
+                variant={action.variant || 'outline'}
+                size="sm"
+                disabled={loading || action.disabled}
+                onClick={() => onAction?.(action.id)}
+                className="h-8 px-3 text-xs"
+              >
+                {action.label}
+              </Button>
+            ))}
+          </div>
         </div>
       )}
 
