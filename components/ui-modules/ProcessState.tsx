@@ -114,7 +114,7 @@ export function ProcessState({
         </Alert>
       )}
 
-      <div className="flex items-center gap-3 p-4 border rounded-lg shadow-lg bg-card">
+      <div className="flex items-center gap-3 p-4 border rounded-lg bg-card">
         {/* Status Icon */}
         <div className="flex-shrink-0">
           {getIcon()}

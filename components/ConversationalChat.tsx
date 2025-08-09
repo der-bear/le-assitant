@@ -134,6 +134,41 @@ export function ConversationalChat({
     setMessages(prev => [...prev, message]);
   }, [generateMessageId]);
 
+  // Helper function to add a processing message that auto-removes after delay
+  const addProcessingMessage = useCallback((content: string, detail: string, duration = 2500) => {
+    const processingMessageId = generateMessageId();
+    
+    // Add processing message
+    const processingMessage: Message = {
+      id: processingMessageId,
+      content,
+      sender: 'assistant',
+      timestamp: new Date(),
+      component: (
+        <ProcessState
+          kind="process-state"
+          state="processing"
+          detail={detail}
+        />
+      ),
+      isWelcome: false,
+      isLocked: false
+    };
+    
+    setMessages(prev => [...prev, processingMessage]);
+    
+    // Remove the processing message after duration
+    const sid = sessionIdRef.current;
+    const timeoutId = window.setTimeout(() => {
+      if (sessionIdRef.current !== sid) return; // Session was reset
+      setMessages(prev => prev.filter(msg => msg.id !== processingMessageId));
+    }, duration);
+    
+    timersRef.current.push(timeoutId);
+    
+    return processingMessageId;
+  }, [generateMessageId]);
+
   // Start Over functionality
   const handleStartOver = useCallback(() => {
     resetSession();
@@ -212,7 +247,15 @@ export function ConversationalChat({
   ]);
 
   const scrollToBottom = useCallback(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    // Use double requestAnimationFrame to ensure DOM has fully updated with new content
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        // Add a longer delay for complex components to fully render
+        setTimeout(() => {
+          messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        }, 200);
+      });
+    });
   }, []);
 
   useEffect(() => {
@@ -267,14 +310,38 @@ export function ConversationalChat({
   }, [addMessage, onShowAllTools, onWelcomeComplete, resetSession, schedule, startGuidedFlow]);
 
   // Handle tool selection from outside
+  const lastProcessedToolRef = useRef<string | null>(null);
+  
   useEffect(() => {
-    if (selectedTool) {
-      handleToolSelection(selectedTool);
+    if (selectedTool && selectedTool !== lastProcessedToolRef.current) {
+      lastProcessedToolRef.current = selectedTool;
+      resetSession();
+      setFlowActive(true);
+      onWelcomeComplete?.();
+      const toolNames: Record<string, string> = {
+        'create-new-client': 'Create New Client',
+        'bulk-client-upload': 'Bulk Client Upload',
+        'all-tools': 'All Tools'
+      };
+      const toolName = toolNames[selectedTool] || selectedTool;
+      addMessage(`${toolName}`, 'user');
+      if (selectedTool === 'all-tools') {
+        onShowAllTools?.();
+      } else {
+        schedule(() => {
+          startGuidedFlow(selectedTool);
+        }, 500);
+      }
       if (onToolProcessed) {
         onToolProcessed();
       }
     }
-  }, [selectedTool, onToolProcessed, handleToolSelection]);
+    
+    // Reset the ref when selectedTool becomes null
+    if (!selectedTool) {
+      lastProcessedToolRef.current = null;
+    }
+  }, [selectedTool, onToolProcessed, onWelcomeComplete, onShowAllTools, addMessage, resetSession, schedule, startGuidedFlow]);
 
   const markStepCompleted = useCallback((stepId: string) => {
     setCompletedSteps(prev => new Set([...prev, stepId]));
@@ -763,19 +830,13 @@ export function ConversationalChat({
     setCurrentStep('creation');
 
     schedule(() => {
-      addMessage(
+      // Add processing message that auto-removes after 2.5 seconds
+      addProcessingMessage(
         'Creating your client with the specified configuration...',
-        'assistant',
-        <ProcessState
-          kind="process-state"
-          state="processing"
-          detail="Setting up client account and delivery configuration..."
-        />,
-        false,
-        'creation'
+        'Setting up client account and delivery configuration...'
       );
 
-      // Simulate client creation process
+      // Simulate client creation process - wait for processing to complete
       schedule(() => {
         addMessage(
           'Client creation completed successfully!',
@@ -829,9 +890,8 @@ export function ConversationalChat({
                 console.log('Send test lead');
               }
             }}
-          />,
-          false,
-          'creation-summary'
+          />
+          // No stepId to keep it active
         );
 
         markStepCompleted('creation');
@@ -881,13 +941,15 @@ export function ConversationalChat({
                 }
               }}
             />,
-            false,
-            'review'
+            false  // isWelcome = false
+            // No stepId parameter - keeps it active
           );
 
-          markStepCompleted('review');
+          // Don't mark review as completed or give it a stepId since it's the final step
+          // This keeps it active and interactive
           setCurrentFlow(null);
           setFlowActive(false);
+          markStepCompleted('creation'); // Mark creation as fully done
         }, 1500);
       }, 2500);
     }, 500);
@@ -899,44 +961,45 @@ export function ConversationalChat({
     markStepCompleted('delivery-method');
 
     schedule(() => {
-      addMessage(
+      // Add processing message that auto-removes after 2.5 seconds
+      addProcessingMessage(
         'Great choice! I\'m now creating the client with your specified configuration.',
-        'assistant',
-        <ProcessState
-          kind="process-state"
-          state="processing"
-          detail="Creating client and configuring delivery..."
-        />,
-        false,
-        'creation'
+        'Creating client and configuring delivery...'
       );
 
+      // Simulate client creation process - wait for processing to complete
       schedule(() => {
         addMessage(
           'Client created successfully! Your new client is ready to receive leads.',
           'assistant',
-          <div className="space-y-4 sm:space-y-6">
-            <Alert
-              kind="alert"
-              type="success"
-              message="Client has been created and is now active in your LeadExec system."
-              title="Setup Complete!"
-            />
-            <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+          <Alert
+            kind="alert"
+            type="success"
+            message="Client has been created and is now active in your LeadExec system."
+            title="Setup Complete!"
+          />,
+          false,
+          'creation-complete'
+        );
+        
+        // Add the action button as a separate message
+        schedule(() => {
+          addMessage(
+            '',
+            'assistant',
+            <div className="flex justify-start">
               <Button 
                 onClick={() => handleToolSelection('create-new-client')} 
-                className="font-medium text-base w-full sm:w-auto"
+                className="font-medium"
               >
                 Create Another Client
               </Button>
             </div>
-          </div>,
-          false,
-          'creation-complete'
-        );
+          );
+        }, 100);
       }, 1500);
     }, 500);
-  }, [addMessage, markStepCompleted, handleToolSelection, schedule]);
+  }, [addMessage, markStepCompleted, handleToolSelection, schedule, addProcessingMessage]);
 
   const handleBulkUpload = useCallback(() => {
     addMessage(
@@ -1044,15 +1107,15 @@ export function ConversationalChat({
   }, [handleSendMessage]);
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col overflow-hidden">
       {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto min-h-0 relative">
         <div className="max-w-4xl mx-auto px-8 py-12 space-y-8">
           {messages.map((message) => (
             <div 
               key={message.id} 
               className={`transition-all duration-300 ${
-                message.stepId && completedSteps.has(message.stepId) 
+                message.stepId && completedSteps.has(message.stepId) && currentStep !== message.stepId
                   ? 'opacity-40 pointer-events-none' 
                   : 'opacity-100'
               }`}
@@ -1095,11 +1158,28 @@ export function ConversationalChat({
                     </Card>
                     
                     {message.component && (
-                      <div className="mt-4 sm:mt-6">
-                        <div className="border rounded-lg p-4 sm:p-6 bg-card shadow-sm">
-                          {message.component}
-                        </div>
-                      </div>
+                      (() => {
+                        // Check if component is ProcessState or Alert (no wrapper needed)
+                        const componentType = (message.component as any)?.props?.kind;
+                        const needsWrapper = componentType !== 'process-state' && componentType !== 'alert';
+                        
+                        if (needsWrapper) {
+                          return (
+                            <div className="mt-4 sm:mt-6">
+                              <div className="border rounded-lg p-4 sm:p-6 bg-card shadow-sm">
+                                {message.component}
+                              </div>
+                            </div>
+                          );
+                        } else {
+                          // Render ProcessState and Alert without wrapper
+                          return (
+                            <div className="mt-4 sm:mt-6">
+                              {message.component}
+                            </div>
+                          );
+                        }
+                      })()
                     )}
                   </div>
 
@@ -1137,7 +1217,7 @@ export function ConversationalChat({
       </div>
 
       {/* Input Area */}
-      <div className="border-t bg-background">
+      <div className="border-t bg-background flex-shrink-0">
         <div className="max-w-4xl mx-auto px-8 py-6">
           <div className="flex gap-3">
             <Input

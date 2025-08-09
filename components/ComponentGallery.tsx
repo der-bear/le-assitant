@@ -232,8 +232,8 @@ const componentExamples: ComponentExample[] = [
   },
   {
     id: 'alert-success',
-    title: 'Alert - Success Message',
-    description: 'Success alert with actions',
+    title: 'Alert - Success',
+    description: 'Success notification with green styling',
     module: 'Alert',
     props: {
       kind: 'alert',
@@ -241,11 +241,52 @@ const componentExamples: ComponentExample[] = [
       title: 'Client Created Successfully',
       message: 'Acme Corp has been added to your LeadExec system and is ready to receive leads.',
       placement: 'inline',
-      dismissible: true,
-      actions: [
-        { id: 'view', label: 'View Client' },
-        { id: 'setup', label: 'Setup Delivery', variant: 'secondary' }
-      ]
+      dismissible: true
+    },
+    component: Alert
+  },
+  {
+    id: 'alert-error',
+    title: 'Alert - Error',
+    description: 'Error notification with red styling',
+    module: 'Alert',
+    props: {
+      kind: 'alert',
+      type: 'error',
+      title: 'Connection Failed',
+      message: 'Unable to connect to the API. Please check your network connection and try again.',
+      placement: 'inline',
+      dismissible: true
+    },
+    component: Alert
+  },
+  {
+    id: 'alert-warning',
+    title: 'Alert - Warning',
+    description: 'Warning notification with amber styling',
+    module: 'Alert',
+    props: {
+      kind: 'alert',
+      type: 'warning',
+      title: 'High Usage Detected',
+      message: 'You have used 90% of your monthly lead quota. Consider upgrading your plan.',
+      placement: 'inline',
+      dismissible: true
+    },
+    component: Alert
+  },
+  {
+    id: 'alert-info',
+    title: 'Alert - Info',
+    description: 'Information notification with blue styling',
+    module: 'Alert',
+    props: {
+      kind: 'alert',
+      type: 'info',
+      title: 'Maintenance Scheduled',
+      message: 'System maintenance is scheduled for tonight at 2 AM EST. Service may be briefly interrupted.',
+      placement: 'inline',
+      dismissible: true
     },
     component: Alert
   },
@@ -302,7 +343,6 @@ const componentExamples: ComponentExample[] = [
     module: 'ProcessState',
     props: {
       kind: 'process-state',
-      title: 'Creating Client',
       state: 'processing',
       detail: 'Setting up delivery configuration...'
     },
@@ -411,11 +451,23 @@ export function ComponentGallery() {
                     </div>
                   </Card>
                 ) : (
-                  <Card className="border border-border rounded-lg bg-card overflow-hidden">
-                    <div className="p-8 bg-background">
-                      {renderExample(example)}
-                    </div>
-                  </Card>
+                  (() => {
+                    // Check if component needs wrapper (Alert and ProcessState don't)
+                    const needsWrapper = example.module !== 'Alert' && example.module !== 'ProcessState';
+                    
+                    if (needsWrapper) {
+                      return (
+                        <Card className="border border-border rounded-lg bg-card overflow-hidden">
+                          <div className="p-8 bg-background">
+                            {renderExample(example)}
+                          </div>
+                        </Card>
+                      );
+                    } else {
+                      // Render Alert and ProcessState with no wrapper at all
+                      return renderExample(example);
+                    }
+                  })()
                 )}
 
                 {/* Separator between examples */}

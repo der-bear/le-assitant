@@ -29,7 +29,7 @@ const toolCategories = [
     title: 'Client Management',
     items: [
       {
-        id: 'leadexec-client-setup',
+        id: 'create-new-client',
         title: 'LeadExec Client Setup',
         description: 'Create new client configurations with guided setup',
         icon: <Building className="w-4 h-4" />
@@ -140,9 +140,7 @@ export default function App() {
   };
 
   const handleToolProcessed = () => {
-    setTimeout(() => {
-      setSelectedTool(null);
-    }, 100);
+    setSelectedTool(null);
   };
 
   const handleToggleGallery = () => {
@@ -269,9 +267,9 @@ export default function App() {
   );
 
   return (
-    <div className="h-screen w-screen bg-background text-foreground">
+    <div className="h-screen w-screen bg-background text-foreground overflow-hidden">
       {/* Shell layout - with responsive sidebar/overlay */}
-      <div className="h-full flex flex-col">
+      <div className="h-full flex flex-col overflow-hidden">
         
         {/* Header - minimalist */}
         <header className="border-b bg-background px-6 py-3 flex items-center justify-between flex-shrink-0">
@@ -317,15 +315,15 @@ export default function App() {
         </header>
 
         {/* Main content area with responsive layout */}
-        <div className="flex-1 flex overflow-hidden relative">
+        <div className="flex-1 flex overflow-hidden relative min-h-0">
           
           {/* Primary content */}
-          <div className="flex-1 relative">
+          <div className="flex-1 relative overflow-hidden">
             {/* Component Gallery or Chat */}
             {showComponentGallery ? (
               <ComponentGallery />
             ) : (
-              <div className="h-full">
+              <div className="h-full min-h-0 flex flex-col">
                 <ConversationalChat 
                   selectedTool={selectedTool}
                   onToolProcessed={handleToolProcessed}
