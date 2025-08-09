@@ -58,6 +58,7 @@ export function ConversationalChat({
   const [showWelcome, setShowWelcome] = useState(true);
   const [flowActive, setFlowActive] = useState(false);
   const [derivedValues, setDerivedValues] = useState<Record<string, any>>({});
+  const [currentStep, setCurrentStep] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Session + timers guard to prevent late async inserts after reset or flow changes
@@ -140,7 +141,17 @@ export function ConversationalChat({
     setCompletedSteps(new Set());
     setFlowActive(false);
     setDerivedValues({});
-    setMessages(prev => prev.filter(msg => msg.isWelcome));
+    setCurrentStep(null);
+    // Update messages to unlock all locked components
+    setMessages(prev => prev.map(msg => ({
+      ...msg,
+      isLocked: false,
+      // Reset the component if it has locked/disabled properties
+      component: msg.component && !msg.isWelcome ? React.cloneElement(
+        msg.component as React.ReactElement,
+        { locked: false, disabled: false }
+      ) : msg.component
+    })).filter(msg => msg.isWelcome));
     setInputValue('');
     setIsTyping(false);
     setIsProcessing(false);
@@ -248,6 +259,7 @@ export function ConversationalChat({
 
     setCurrentFlow(toolId);
     setCompletedSteps(new Set());
+    setCurrentStep(null);
 
     schedule(() => {
       startGuidedFlow(toolId);
@@ -287,12 +299,12 @@ export function ConversationalChat({
           steps={steps}
           title="Client Setup Process"
           showIndex={true}
-          locked={completedSteps.has('setup-overview')}
+          locked={false}
         />
         <Button 
           onClick={() => proceedToBasicInfo()} 
           className="gap-2 font-medium"
-          disabled={completedSteps.has('setup-overview')}
+          disabled={false}
         >
           <ArrowRight className="w-4 h-4" />
           Start Setup
@@ -301,13 +313,14 @@ export function ConversationalChat({
       false,
       'setup-overview'
     );
-  }, [addMessage, completedSteps]);
+  }, [addMessage]);
 
   const proceedToBasicInfo = useCallback(() => {
     addMessage('Start Setup', 'user');
     
     // Mark setup overview as completed
     markStepCompleted('setup-overview');
+    setCurrentStep('basic-info');
     
     schedule(() => {
       // Reset derived values for new form
@@ -409,14 +422,14 @@ export function ConversationalChat({
           onRequestDerive={handleDeriveRequest}
           derivedValues={derivedValues}
           loading={false}
-          disabled={completedSteps.has('basic-info')}
-          locked={completedSteps.has('basic-info')}
+          disabled={completedSteps.has('basic-info') && currentStep !== 'basic-info'}
+          locked={completedSteps.has('basic-info') && currentStep !== 'basic-info'}
         />,
         false,
         'basic-info'
       );
     }, 500);
-  }, [addMessage, completedSteps, derivedValues, schedule]);
+  }, [addMessage, completedSteps, currentStep, derivedValues, schedule]);
 
   const handleDeriveRequest = useCallback((targets: any[], currentValues: Record<string, any>) => {
     console.log('🔄 Derivation triggered for:', targets, 'with values:', currentValues);
@@ -484,6 +497,7 @@ export function ConversationalChat({
     
     // Mark basic info step as completed
     markStepCompleted('basic-info');
+    setCurrentStep('delivery-method');
     
     schedule(() => {
       const deliveryOptions = [
@@ -525,14 +539,14 @@ export function ConversationalChat({
           mode="single"
           layout="card"
           onChange={(value) => handleDeliveryMethodSelect(value as string)}
-          disabled={completedSteps.has('delivery-method')}
-          locked={completedSteps.has('delivery-method')}
+          disabled={completedSteps.has('delivery-method') && currentStep !== 'delivery-method'}
+          locked={completedSteps.has('delivery-method') && currentStep !== 'delivery-method'}
         />,
         false,
         'delivery-method'
       );
     }, 500);
-  }, [addMessage, markStepCompleted, completedSteps, schedule]);
+  }, [addMessage, markStepCompleted, completedSteps, currentStep, schedule]);
 
   const handleDeliveryMethodSelect = useCallback((method: string) => {
     const methodLabels: Record<string, string> = {
@@ -546,6 +560,7 @@ export function ConversationalChat({
     
     // Mark delivery method step as completed
     markStepCompleted('delivery-method');
+    setCurrentStep('delivery-config');
     
     schedule(() => {
       // Step 2b: Based on delivery choice, show specific configuration form
@@ -585,8 +600,8 @@ export function ConversationalChat({
             ]}
             submitLabel="Continue to Configuration"
             onSubmit={handleDeliveryConfigSubmit}
-            disabled={completedSteps.has('delivery-config')}
-            locked={completedSteps.has('delivery-config')}
+            disabled={completedSteps.has('delivery-config') && currentStep !== 'delivery-config'}
+            locked={completedSteps.has('delivery-config') && currentStep !== 'delivery-config'}
           />,
           false,
           'delivery-config'
@@ -627,8 +642,8 @@ export function ConversationalChat({
             ]}
             submitLabel="Continue to Configuration"
             onSubmit={handleDeliveryConfigSubmit}
-            disabled={completedSteps.has('delivery-config')}
-            locked={completedSteps.has('delivery-config')}
+            disabled={completedSteps.has('delivery-config') && currentStep !== 'delivery-config'}
+            locked={completedSteps.has('delivery-config') && currentStep !== 'delivery-config'}
           />,
           false,
           'delivery-config'
@@ -661,7 +676,7 @@ export function ConversationalChat({
         handleDeliveryConfigSubmit({ skipped: true });
       }
     }, 500);
-  }, [addMessage, markStepCompleted, completedSteps, schedule]);
+  }, [addMessage, markStepCompleted, completedSteps, currentStep, schedule]);
 
   const handleDeliveryConfigSubmit = useCallback((config: Record<string, any>) => {
     console.log('🔧 handleDeliveryConfigSubmit called with config:', config);
@@ -669,6 +684,7 @@ export function ConversationalChat({
     
     // Mark delivery configuration as completed
     markStepCompleted('delivery-config');
+    setCurrentStep('configuration');
     
     schedule(() => {
       console.log('🔧 Adding Configuration form message');
@@ -732,18 +748,19 @@ export function ConversationalChat({
           ]}
           submitLabel="Create Client"
           onSubmit={handleConfigurationSubmit}
-          disabled={completedSteps.has('configuration')}
-          locked={completedSteps.has('configuration')}
+          disabled={completedSteps.has('configuration') && currentStep !== 'configuration'}
+          locked={completedSteps.has('configuration') && currentStep !== 'configuration'}
         />,
         false,
         'configuration'
       );
     }, 500);
-  }, [addMessage, markStepCompleted, completedSteps, schedule]);
+  }, [addMessage, markStepCompleted, completedSteps, currentStep, schedule]);
 
   const handleConfigurationSubmit = useCallback((configData: Record<string, any>) => {
     addMessage('Final configuration saved', 'user');
     markStepCompleted('configuration');
+    setCurrentStep('creation');
 
     schedule(() => {
       addMessage(
@@ -874,7 +891,7 @@ export function ConversationalChat({
         }, 1500);
       }, 2500);
     }, 500);
-  }, [addMessage, markStepCompleted, handleToolSelection, onShowAllTools, schedule]);
+  }, [addMessage, markStepCompleted, handleToolSelection, onShowAllTools, currentStep, schedule]);
 
   // Also guard the legacy helper to avoid stray inserts
   const oldHandleDeliveryMethodSelect = useCallback((method: string) => {
