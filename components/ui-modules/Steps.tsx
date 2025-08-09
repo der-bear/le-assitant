@@ -150,7 +150,7 @@ export function Steps({
         {(title || description) && (
           <div className="space-y-2">
             {title && (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1">
                 <h3 className="font-medium">{title}</h3>
                 {helpUrl && (
                   <Button variant="ghost" size="sm" asChild className="h-4 w-4 p-0">
@@ -190,7 +190,7 @@ export function Steps({
         {(title || description) && (
           <div className="space-y-2">
             {title && (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1">
                 <h3 className="font-medium">{title}</h3>
                 {helpUrl && (
                   <Button variant="ghost" size="sm" asChild className="h-4 w-4 p-0">
@@ -259,14 +259,14 @@ export function Steps({
 
               {/* Step Content - smaller gap between title and description */}
               <div className="flex-1 min-w-0 space-y-0.5">
-                <div className={`font-medium ${getStepTextClasses(step)}`}>
+                <div className={`font-medium text-sm ${getStepTextClasses(step)} leading-tight`}>
                   {step.title}
                   {step.optional && (
-                    <span className="text-muted-foreground ml-2 text-sm font-normal">(optional)</span>
+                    <span className="text-muted-foreground ml-2 text-xs font-normal">(optional)</span>
                   )}
                 </div>
                 {step.hint && (
-                  <p className="text-sm text-muted-foreground leading-relaxed">
+                  <p className="text-xs text-muted-foreground font-normal leading-relaxed">
                     {step.hint}
                   </p>
                 )}

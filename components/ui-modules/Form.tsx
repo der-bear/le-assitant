@@ -712,7 +712,7 @@ export function Form({
       {(title || description) && (
         <div className="space-y-1">
           {title && (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
               <h3 className="text-lg font-medium">{title}</h3>
               {helpUrl && (
                 <Button variant="ghost" size="sm" asChild className="h-4 w-4 p-0">
@@ -736,7 +736,7 @@ export function Form({
         </Alert>
       )}
 
-      {/* Form Content - no container, direct form */}
+      {/* Form Content */}
       {effectiveSections.length > 0 && (
         <form onSubmit={handleSubmit} className="space-y-6">
           {effectiveSections.map((section, index) => renderSection(section, index))}

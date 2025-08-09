@@ -239,7 +239,7 @@ export function FileDrop({
       {(title || description) && (
         <div className="space-y-1">
           {title && (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
               <h3 className="font-medium">{title}</h3>
               {helpUrl && (
                 <Button variant="ghost" size="sm" asChild className="h-4 w-4 p-0">

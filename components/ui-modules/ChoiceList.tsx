@@ -170,30 +170,29 @@ export function ChoiceList({
     return (
       <Card
         key={choice.id}
-        className={`p-4 sm:p-5 cursor-pointer transition-colors border-border bg-card hover:bg-accent ${
+        className={`p-4 cursor-pointer transition-all duration-200 border-border ${
           selected 
             ? 'border-primary bg-primary/5' 
-            : 'hover:bg-accent'
-        } ${choice.disabled || disabled || locked ? 'opacity-50 cursor-not-allowed' : ''}`}
+            : disabled || locked
+            ? 'opacity-50 cursor-not-allowed bg-muted/20'
+            : 'hover:bg-accent/50 group'
+        }`}
         onClick={() => !(choice.disabled || disabled || locked) && handleSelectionChange(choice.id)}
       >
-        <div className="space-y-3 sm:space-y-4">
-          {/* Icon and selection indicator */}
-          <div className="flex items-center justify-between">
-            {icon && (
-              <div className="text-muted-foreground flex-shrink-0">{icon}</div>
-            )}
-            {mode === 'multiple' && (
-              <div className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 ${
+        {/* Mobile: horizontal layout, Desktop: vertical layout */}
+        <div className="flex sm:flex-col sm:space-y-3 space-x-3 sm:space-x-0 items-start relative">
+          {/* Selection indicator - positioned differently for horizontal vs vertical */}
+          <div className="absolute right-0 top-0 sm:top-0 sm:right-0 flex-shrink-0 z-10">
+            {mode === 'multiple' ? (
+              <div className={`w-4 h-4 rounded border-2 flex items-center justify-center ${
                 selected ? 'bg-primary border-primary' : 'border-border'
               }`}>
                 {selected && (
                   <div className="w-2 h-2 bg-primary-foreground rounded-sm" />
                 )}
               </div>
-            )}
-            {mode === 'single' && (
-              <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
+            ) : (
+              <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
                 selected ? 'border-primary' : 'border-border'
               }`}>
                 {selected && (
@@ -203,10 +202,21 @@ export function ChoiceList({
             )}
           </div>
 
+          {/* Icon with background (unified with welcome cards) */}
+          {icon && (
+            <div className={`rounded-lg bg-muted flex items-center justify-center flex-shrink-0 transition-colors ${
+              disabled || locked
+                ? 'w-8 h-8' 
+                : 'w-8 h-8 md:w-10 md:h-10 group-hover:bg-accent-foreground/10'
+            }`}>
+              {icon}
+            </div>
+          )}
+
           {/* Content */}
-          <div className="space-y-1.5">
+          <div className="space-y-1 text-left flex-1 min-w-0 pr-6 sm:pr-0">
             <div className="flex items-start gap-2 flex-wrap">
-              <h4 className="text-base font-medium text-foreground leading-tight flex-1 min-w-0">{choice.label}</h4>
+              <h3 className="font-medium text-sm text-foreground leading-tight flex-1 min-w-0">{choice.label}</h3>
               {choice.badge && (
                 <Badge variant="secondary" className="text-xs px-2 py-0.5 font-normal flex-shrink-0">
                   {choice.badge}
@@ -214,7 +224,7 @@ export function ChoiceList({
               )}
             </div>
             {choice.description && (
-              <p className="text-sm font-normal text-muted-foreground leading-relaxed">{choice.description}</p>
+              <p className="text-xs text-muted-foreground font-normal leading-relaxed">{choice.description}</p>
             )}
           </div>
         </div>
@@ -231,9 +241,9 @@ export function ChoiceList({
       )}
       <div className={`${
         effectiveLayout === 'grid' 
-          ? 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3' 
+          ? 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3 md:gap-4' 
           : effectiveLayout === 'card'
-          ? 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4'
+          ? 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 sm:gap-3 md:gap-4'
           : 'space-y-2'
       }`}>
         {choices.map(renderChoice)}
@@ -247,7 +257,7 @@ export function ChoiceList({
       {(title || description) && (
         <div className="space-y-2">
           {title && (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
               <h3 className="text-lg font-medium text-foreground leading-tight">{title}</h3>
               {helpUrl && (
                 <Button variant="ghost" size="sm" asChild className="h-4 w-4 p-0 flex-shrink-0">

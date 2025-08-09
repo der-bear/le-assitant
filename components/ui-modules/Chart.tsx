@@ -152,7 +152,7 @@ export function Chart({
         <div className="space-y-1">
           {payload.map((entry: any, index: number) => (
             <div key={index} className="flex items-center justify-between gap-3 min-w-[120px]">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1">
                 <div 
                   className="w-3 h-3 rounded-sm shadow-sm" 
                   style={{ backgroundColor: entry.color }}

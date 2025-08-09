@@ -203,7 +203,7 @@ export function ConversationalChat({
   const WelcomeCards = useCallback(() => (
     <div className="space-y-6">
       {/* Quick Tiles Grid - responsive layout with horizontal icons on mobile */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 md:gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3 md:gap-4">
         {quickTiles.map(tile => (
           <Card
             key={tile.id}
@@ -1298,7 +1298,7 @@ export function ConversationalChat({
                     
                     {message.component && (
                       (() => {
-                        // Check if component is ProcessState, Alert, or suggested actions/sources (no wrapper needed)
+                        // Determine if component needs container wrapper
                         const componentType = (message.component as any)?.props?.kind;
                         const isButtonGroup = React.isValidElement(message.component) && 
                           message.component.type === 'div' && 
@@ -1308,27 +1308,21 @@ export function ConversationalChat({
                           (message.component.props?.className?.includes('space-y-2') ||
                            message.component.props?.className?.includes('grid grid-cols-1'));
                         
-                        const needsWrapper = componentType !== 'process-state' && 
-                                           componentType !== 'alert' && 
-                                           !isButtonGroup && 
-                                           !isSourcesList;
+                        // Components that don't need container wrapper (they handle their own root-level styling)
+                        const noWrapperTypes = ['process-state', 'alert'];
+                        const needsWrapper = !noWrapperTypes.includes(componentType) && !isButtonGroup && !isSourcesList;
                         
-                        if (needsWrapper) {
-                          return (
-                            <div className="mt-4 sm:mt-6">
+                        return (
+                          <div className="mt-4 sm:mt-6">
+                            {needsWrapper ? (
                               <div className="border rounded-lg p-4 sm:p-6 bg-card shadow-sm">
                                 {message.component}
                               </div>
-                            </div>
-                          );
-                        } else {
-                          // Render without wrapper for ProcessState, Alert, suggested actions, and sources
-                          return (
-                            <div className="mt-4 sm:mt-6">
-                              {message.component}
-                            </div>
-                          );
-                        }
+                            ) : (
+                              message.component
+                            )}
+                          </div>
+                        );
                       })()
                     )}
                   </div>
