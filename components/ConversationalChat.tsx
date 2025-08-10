@@ -18,9 +18,14 @@ import {
   Upload, 
   Wrench,
   ArrowRight,
-  Bot,
-  ExternalLink
+  Bot
 } from 'lucide-react';
+
+// Flow Framework imports
+import { useFlowOrchestrator } from '../flows/hooks/useFlowOrchestrator';
+import { componentFactory } from '../flows/factories/ComponentFactory';
+import { initializeFlows } from '../flows/registry/FlowRegistry';
+import { StepDefinition } from '../flows/types/flow.types';
 
 interface SuggestedAction {
   id: string;
@@ -77,12 +82,30 @@ export function ConversationalChat({
   const [isTyping, setIsTyping] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [messageCounter, setMessageCounter] = useState(1);
-  const [currentFlow, setCurrentFlow] = useState<string | null>(null);
-  const [completedSteps, setCompletedSteps] = useState<Set<string>>(new Set());
   const [showWelcome, setShowWelcome] = useState(true);
-  const [flowActive, setFlowActive] = useState(false);
   const [derivedValues, setDerivedValues] = useState<Record<string, any>>({});
-  const [currentStep, setCurrentStep] = useState<string | null>(null);
+  
+  // Flow Framework integration
+  const {
+    currentFlow,
+    currentStep,
+    flowContext,
+    isFlowActive,
+    startFlow,
+    completeStep,
+    handleAction: handleFlowAction,
+    resetFlow,
+    isStepLocked,
+    isStepCompleted,
+    isCurrentStep,
+    getSuggestedActions,
+    triggeredActionId
+  } = useFlowOrchestrator();
+  
+  // Initialize flow framework on mount
+  useEffect(() => {
+    initializeFlows();
+  }, []);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Session + timers guard to prevent late async inserts after reset or flow changes
@@ -231,14 +254,12 @@ export function ConversationalChat({
     return processingMessageId;
   }, [generateMessageId]);
 
-  // Start Over functionality
+  // Start Over functionality - updated to use Flow Framework
   const handleStartOver = useCallback(() => {
     resetSession();
-    setCurrentFlow(null);
-    setCompletedSteps(new Set());
-    setFlowActive(false);
+    resetFlow();
     setDerivedValues({});
-    setCurrentStep(null);
+    setShowWelcome(true);
     // Update messages to unlock all locked components
     setMessages(prev => prev.map(msg => ({
       ...msg,
@@ -252,7 +273,7 @@ export function ConversationalChat({
     setInputValue('');
     setIsTyping(false);
     setIsProcessing(false);
-  }, [resetSession]);
+  }, [resetSession, resetFlow]);
 
   // Watch for external reset trigger
   useEffect(() => {
@@ -270,16 +291,16 @@ export function ConversationalChat({
           <Card
             key={tile.id}
             className={`p-4 cursor-pointer transition-all duration-200 border-border ${
-              flowActive 
+              isFlowActive 
                 ? 'opacity-40 pointer-events-none bg-muted/20' 
                 : 'hover:bg-accent/50 group'
             }`}
-            onClick={() => !flowActive && handleToolSelection(tile.id)}
+            onClick={() => !isFlowActive && handleToolSelection(tile.id)}
           >
             {/* Mobile: horizontal layout, Desktop: vertical layout */}
             <div className="flex sm:flex-col sm:space-y-3 space-x-3 sm:space-x-0 items-start">
               <div className={`rounded-lg bg-muted flex items-center justify-center flex-shrink-0 transition-colors ${
-                flowActive 
+                isFlowActive 
                   ? 'w-8 h-8' 
                   : 'w-8 h-8 md:w-10 md:h-10 group-hover:bg-accent-foreground/10'
               }`}>
@@ -294,7 +315,7 @@ export function ConversationalChat({
         ))}
       </div>
     </div>
-  ), [flowActive]);
+  ), [isFlowActive]);
 
   // Initialize with welcome message
   const [messages, setMessages] = useState<Message[]>(() => [
@@ -448,14 +469,14 @@ export function ConversationalChat({
   }, [addMessage]);
 
   const startGuidedFlow = useCallback((flowId: string) => {
-    if (flowId === 'create-new-client') {
-      handleClientSetup();
-    } else if (flowId === 'bulk-client-upload') {
-      handleBulkUpload();
-    } else {
+    try {
+      startFlow(flowId);
+      // Note: Flow steps will be rendered by the useEffect that watches currentStep changes
+    } catch (error) {
+      console.error('Failed to start flow:', error);
       handleUnimplementedTool(flowId);
     }
-  }, []);
+  }, [startFlow]);
 
   const handleToolSelection = useCallback((toolId: string) => {
     // Special handling for All Tools - just open the panel, no flow
@@ -465,7 +486,6 @@ export function ConversationalChat({
     }
     
     resetSession();
-    setFlowActive(true);
     onWelcomeComplete?.();
 
     const toolNames: Record<string, string> = {
@@ -476,14 +496,107 @@ export function ConversationalChat({
     const toolName = toolNames[toolId] || toolId;
     addSimpleMessage(`${toolName}`, 'user');
 
-    setCurrentFlow(toolId);
-    setCompletedSteps(new Set());
-    setCurrentStep(null);
-
     schedule(() => {
       startGuidedFlow(toolId);
     }, 500);
-  }, [addMessage, onShowAllTools, onWelcomeComplete, resetSession, schedule, startGuidedFlow]);
+  }, [addSimpleMessage, onShowAllTools, onWelcomeComplete, resetSession, schedule, startGuidedFlow]);
+
+  // Utility function to generate strong passwords
+  const generatePassword = useCallback((length: number = 12): string => {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*';
+    let password = '';
+    for (let i = 0; i < length; i++) {
+      password += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return password;
+  }, []);
+
+  // New function to render flow steps using ComponentFactory
+  const renderFlowStep = useCallback((step: StepDefinition) => {
+    if (!currentFlow) {
+      console.warn('renderFlowStep called but no current flow');
+      return;
+    }
+    
+    console.log('🎨 renderFlowStep called for step:', step.id);
+
+    // Create component using ComponentFactory
+    const component = componentFactory.createComponent(
+      step.component,
+      flowContext,
+      {
+        stepId: step.id,
+        onSubmit: (data: any) => {
+          // Form submission handler
+          completeStep(data);
+        },
+        onAction: (actionId: string) => {
+          // Action handler for step actions
+          handleFlowAction(actionId);
+        },
+        // Pass derived values for forms
+        derivedValues: derivedValues,
+        onRequestDerive: (targets: any[], currentValues: Record<string, any>) => {
+          // Handle field derivation requests
+          const derivedData: Record<string, any> = {};
+          
+          targets.forEach(target => {
+            if (target.strategy === 'usernameFromEmail' && currentValues.email) {
+              const email = currentValues.email;
+              derivedData[target.fieldId] = email.split('@')[0];
+            } else if (target.strategy === 'strongPassword') {
+              derivedData[target.fieldId] = generatePassword(12);
+            }
+          });
+          
+          if (Object.keys(derivedData).length > 0) {
+            setDerivedValues(prev => ({ ...prev, ...derivedData }));
+          }
+        }
+      }
+    );
+
+    // Create message content based on step description
+    const content = step.description || `Working on ${step.title}`;
+    
+    // Create suggested actions if step has actions
+    const suggestedActions = step.actions?.map(action => ({
+      id: action.id,
+      label: action.label,
+      icon: action.icon,
+      onClick: () => handleFlowAction(action.id)
+    }));
+
+    // Add the step message
+    addAgentResponse(
+      content,
+      component,
+      suggestedActions,
+      undefined, // sources
+      step.id
+    );
+  }, [currentFlow, flowContext, completeStep, handleFlowAction, derivedValues, setDerivedValues, addAgentResponse]);
+
+  // Auto-render steps when flow progresses (with loop prevention)
+  const lastRenderedStepRef = useRef<string | null>(null);
+  const isRenderingRef = useRef<boolean>(false);
+  
+  useEffect(() => {
+    if (currentStep && currentStep.id !== lastRenderedStepRef.current && !isRenderingRef.current) {
+      console.log('🎯 Rendering new flow step:', currentStep.id);
+      lastRenderedStepRef.current = currentStep.id;
+      isRenderingRef.current = true;
+      
+      // Use schedule to prevent immediate re-renders
+      schedule(() => {
+        renderFlowStep(currentStep);
+        // Reset the rendering flag after a delay to allow for the next step
+        setTimeout(() => {
+          isRenderingRef.current = false;
+        }, 500);
+      }, 100);
+    }
+  }, [currentStep, renderFlowStep, schedule]);
 
   // Handle tool selection from outside
   const lastProcessedToolRef = useRef<string | null>(null);
@@ -525,11 +638,39 @@ export function ConversationalChat({
     }
   }, [selectedTool, onToolProcessed, onWelcomeComplete, onShowAllTools, addMessage, resetSession, schedule, startGuidedFlow]);
 
-  const markStepCompleted = useCallback((stepId: string) => {
-    setCompletedSteps(prev => new Set([...prev, stepId]));
+  // DEPRECATED: markStepCompleted - now handled by FlowOrchestrator  
+  // Temporary placeholder to prevent errors - should be removed when old functions are cleaned up
+  const markStepCompleted = useCallback((_stepId: string) => {
+    console.warn('markStepCompleted is deprecated - use FlowOrchestrator instead');
+    // No-op - FlowOrchestrator handles step completion
+  }, []);
+  
+  // DEPRECATED: setCurrentStep - now handled by FlowOrchestrator
+  // Temporary placeholder to prevent errors 
+  const setCurrentStep = useCallback((_stepId: string) => {
+    console.warn('setCurrentStep is deprecated - use FlowOrchestrator instead');
+    // No-op - FlowOrchestrator handles current step
+  }, []);
+  
+  // DEPRECATED: completedSteps - now handled by FlowOrchestrator
+  // Temporary placeholder using flowContext
+  const completedSteps = flowContext.completedSteps;
+  
+  // DEPRECATED: currentStep - now handled by FlowOrchestrator  
+  // Temporary placeholder using flowContext
+  const currentStepId = currentStep?.id || null;
+  
+  // DEPRECATED: setCurrentFlow, setFlowActive - handled by FlowOrchestrator
+  const setCurrentFlow = useCallback((_flowId: string | null) => {
+    console.warn('setCurrentFlow is deprecated - use FlowOrchestrator instead');
+  }, []);
+  
+  const setFlowActive = useCallback((_active: boolean) => {
+    console.warn('setFlowActive is deprecated - use FlowOrchestrator instead');  
   }, []);
 
-  const handleClientSetup = useCallback(() => {
+  // DEPRECATED: Old hardcoded flow - now handled by FlowOrchestrator
+  const handleClientSetup_DEPRECATED = useCallback(() => {
     const steps = [
       { id: 'basic-info', title: 'Basic Information', hint: 'Company details and contact info' },
       { id: 'delivery-method', title: 'Delivery Method', hint: 'Choose how leads will be sent' },  
@@ -673,8 +814,8 @@ export function ConversationalChat({
           onRequestDerive={handleDeriveRequest}
           derivedValues={derivedValues}
           loading={false}
-          disabled={completedSteps.has('basic-info') && currentStep !== 'basic-info'}
-          locked={completedSteps.has('basic-info') && currentStep !== 'basic-info'}
+          disabled={completedSteps.has('basic-info') && currentStepId !== 'basic-info'}
+          locked={completedSteps.has('basic-info') && currentStepId !== 'basic-info'}
         />,
         undefined, // suggestedActions
         undefined, // sources  
@@ -793,8 +934,8 @@ export function ConversationalChat({
               mode="single"
               layout="card"
               onChange={(value) => handleDeliveryMethodSelect(value as string)}
-              disabled={completedSteps.has('delivery-method') && currentStep !== 'delivery-method'}
-              locked={completedSteps.has('delivery-method') && currentStep !== 'delivery-method'}
+              disabled={completedSteps.has('delivery-method') && currentStepId !== 'delivery-method'}
+              locked={completedSteps.has('delivery-method') && currentStepId !== 'delivery-method'}
             />
           ),
           stepId: 'delivery-method'
@@ -875,8 +1016,8 @@ export function ConversationalChat({
                 ]}
                 submitLabel="Continue to Configuration"
                 onSubmit={handleDeliveryConfigSubmit}
-                disabled={completedSteps.has('delivery-config') && currentStep !== 'delivery-config'}
-                locked={completedSteps.has('delivery-config') && currentStep !== 'delivery-config'}
+                disabled={completedSteps.has('delivery-config') && currentStepId !== 'delivery-config'}
+                locked={completedSteps.has('delivery-config') && currentStepId !== 'delivery-config'}
               />
             ),
             stepId: 'delivery-config'
@@ -938,8 +1079,8 @@ export function ConversationalChat({
                 ]}
                 submitLabel="Continue to Configuration"
                 onSubmit={handleDeliveryConfigSubmit}
-                disabled={completedSteps.has('delivery-config') && currentStep !== 'delivery-config'}
-                locked={completedSteps.has('delivery-config') && currentStep !== 'delivery-config'}
+                disabled={completedSteps.has('delivery-config') && currentStepId !== 'delivery-config'}
+                locked={completedSteps.has('delivery-config') && currentStepId !== 'delivery-config'}
               />
             ),
             stepId: 'delivery-config'
@@ -1056,8 +1197,8 @@ export function ConversationalChat({
               ]}
               submitLabel="Create Client"
               onSubmit={handleConfigurationSubmit}
-              disabled={completedSteps.has('configuration') && currentStep !== 'configuration'}
-              locked={completedSteps.has('configuration') && currentStep !== 'configuration'}
+              disabled={completedSteps.has('configuration') && currentStepId !== 'configuration'}
+              locked={completedSteps.has('configuration') && currentStepId !== 'configuration'}
             />
           ),
           stepId: 'configuration'
@@ -1209,7 +1350,8 @@ export function ConversationalChat({
     }, 500);
   }, [addMessage, markStepCompleted, handleToolSelection, schedule, addProcessingMessage]);
 
-  const handleBulkUpload = useCallback(() => {
+  // DEPRECATED: Old hardcoded bulk upload flow - now handled by FlowOrchestrator
+  const handleBulkUpload_DEPRECATED = useCallback(() => {
     const steps = [
       { id: 'prepare', title: 'Prepare File', hint: 'Download template and prepare your data' },
       { id: 'upload', title: 'Upload File', hint: 'Upload your Excel or CSV file' },
@@ -1262,12 +1404,14 @@ export function ConversationalChat({
           {
             id: 'download-template',
             label: 'Download Excel Template',
-            icon: 'Download'
+            icon: 'Download',
+            onClick: () => handleDownloadTemplate()
           },
           {
             id: 'use-own-file',
             label: 'I have my own file ready',
-            icon: 'FileCheck'
+            icon: 'FileCheck',
+            onClick: () => handleReadyToUpload()
           }
         ], // suggestedActions
         undefined, // sources
@@ -1330,6 +1474,13 @@ export function ConversationalChat({
       );
     }, 500);
   }, [addMessage, schedule]);
+
+  // Function for "I have my own file ready" action
+  const handleReadyToUpload = useCallback(() => {
+    addSimpleMessage('I have my own file ready', 'user');
+    // For now, proceed to the upload step
+    proceedToBulkUploadFile();
+  }, [addSimpleMessage]);
 
   const proceedToBulkUploadFile = useCallback(() => {
     addSimpleMessage('Ready to Upload', 'user');
@@ -1441,8 +1592,8 @@ export function ConversationalChat({
                 'send-emails': 'todo'
               }}
               current="create-accounts"
-              locked={completedSteps.has('processing') && currentStep !== 'processing'}
-              disabled={completedSteps.has('processing') && currentStep !== 'processing'}
+              locked={completedSteps.has('processing') && currentStepId !== 'processing'}
+              disabled={completedSteps.has('processing') && currentStepId !== 'processing'}
             />
           ),
           stepId: 'processing'
@@ -1764,7 +1915,7 @@ export function ConversationalChat({
             <div 
               key={message.id} 
               className={`transition-all duration-300 ${
-                message.stepId && completedSteps.has(message.stepId) && currentStep !== message.stepId
+                message.stepId && completedSteps.has(message.stepId) && currentStepId !== message.stepId
                   ? 'opacity-40 pointer-events-none' 
                   : 'opacity-100'
               }`}
@@ -1838,7 +1989,7 @@ export function ConversationalChat({
                     
                     {/* Suggested Actions - only for assistant messages */}
                     {message.sender === 'assistant' && message.suggestedActions && message.suggestedActions.length > 0 && (
-                      <div className={`mt-4 ${flowActive && !message.isWelcome ? 'opacity-40 pointer-events-none' : ''}`}>
+                      <div className={`mt-4 ${isFlowActive && !message.isWelcome ? 'opacity-40 pointer-events-none' : ''}`}>
                         <div className="flex flex-wrap gap-2">
                           {message.suggestedActions.map((action) => (
                             <Button
@@ -1846,11 +1997,11 @@ export function ConversationalChat({
                               variant={action.variant || 'outline'}
                               size="sm"
                               className={`h-8 text-xs gap-2 ${
-                                flowActive && !message.isWelcome 
+                                isFlowActive && !message.isWelcome 
                                   ? 'opacity-40 pointer-events-none bg-muted/20' 
                                   : ''
                               }`}
-                              disabled={action.disabled || (flowActive && !message.isWelcome)}
+                              disabled={action.disabled || (isFlowActive && !message.isWelcome)}
                               onClick={action.onClick}
                             >
                               {action.icon && action.icon}
