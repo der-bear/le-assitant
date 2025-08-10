@@ -15,6 +15,11 @@ This is a React + TypeScript application for LeadExec AI Assistant - a conversat
 /components/
   /ui/           - Base shadcn/ui components
   /ui-modules/   - Custom business logic modules (Table, Form, Steps, etc.)
+    /shared/     - Shared module foundations (types, containers, states)
+/flows/          - Flow Framework (NEW)
+  /definitions/  - Declarative flow configurations
+  /types/        - Flow type definitions
+  /orchestrator/ - Flow execution engine
 /styles/
   globals.css    - Tailwind config and custom utilities
 /services/       - API and utility services
@@ -35,12 +40,22 @@ This is a React + TypeScript application for LeadExec AI Assistant - a conversat
 - Components support `locked` and `disabled` states
 - Use `useCallback` and `useMemo` for performance optimization
 
+### Flow Framework Architecture (NEW)
+- **Flow Definitions**: Declarative flow configurations in `/flows/definitions/`
+- **Flow Orchestrator**: Service that manages flow execution and state
+- **Separation of Concerns**: Chat UI separate from flow logic
+- **Universal Pattern**: All flows follow Overview → Start → Steps → Results
+- **Consistent Locking**: Steps and actions lock based on flow progression
+- **Pure UI Modules**: Components remain flow-agnostic
+- **Implementation Plan**: See [Flow-Framework.md](./guidelines/Flow-Framework.md) for detailed architecture
+
 ### Chat Flow Management
-- ConversationalChat component manages the main chat interface
+- FlowOrchestrator service manages flow execution
 - Uses `completedSteps` Set to track workflow progress
 - `currentStep` state tracks the active step
 - Start Over functionality must clear both `completedSteps` and `currentStep`
 - Components check both completed status AND current step for locking
+- Suggested actions lock and highlight based on flow state
 
 ### Common Issues & Solutions
 
@@ -71,6 +86,7 @@ npm run preview    # Preview production build
 ### Must Read Guidelines
 The project has comprehensive guidelines in the `/guidelines` directory:
 
+- **[Flow-Framework.md](./guidelines/Flow-Framework.md)** - Flow Framework architecture and patterns (CRITICAL)
 - **[General-Development.md](./guidelines/General-Development.md)** - Overall development practices
 - **[Guidelines.md](./guidelines/Guidelines.md)** - Main project guidelines
 - **[React-Components.md](./guidelines/React-Components.md)** - React component best practices

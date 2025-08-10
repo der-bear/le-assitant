@@ -1210,55 +1210,231 @@ export function ConversationalChat({
   }, [addMessage, markStepCompleted, handleToolSelection, schedule, addProcessingMessage]);
 
   const handleBulkUpload = useCallback(() => {
-    // Set current step for proper flow management
-    setCurrentStep('bulk-upload');
-    
+    const steps = [
+      { id: 'prepare', title: 'Prepare File', hint: 'Download template and prepare your data' },
+      { id: 'upload', title: 'Upload File', hint: 'Upload your Excel or CSV file' },
+      { id: 'validate', title: 'Validation', hint: 'System validates the data' },
+      { id: 'processing', title: 'Processing', hint: 'Create clients and generate credentials' },
+      { id: 'results', title: 'Results', hint: 'Review upload results and next steps' }
+    ];
+
     addMessage(
-      'I\'ll help you upload multiple clients at once using an Excel file. The system will automatically generate usernames and passwords for each client.',
+      'I\'ll help you upload multiple clients at once using an Excel file. The system will automatically generate usernames and passwords for each client. Here\'s the process:',
       'assistant',
       {
         component: (
-          <div className="space-y-6">
+          <div className="space-y-4">
+            <Steps
+              kind="steps"
+              variant="overview"
+              steps={steps}
+              title="Bulk Upload Process"
+              showIndex={true}
+              locked={false}
+            />
+            <Button 
+              onClick={() => proceedToBulkUploadPrepare()} 
+              className="gap-2 font-medium"
+              disabled={false}
+            >
+              <ArrowRight className="w-4 h-4" />
+              Start Bulk Upload
+            </Button>
+          </div>
+        ),
+        stepId: 'bulk-overview'
+      }
+    );
+  }, [addMessage]);
+
+  const proceedToBulkUploadPrepare = useCallback(() => {
+    addSimpleMessage('Start Bulk Upload', 'user');
+    
+    // Mark overview as completed
+    markStepCompleted('bulk-overview');
+    setCurrentStep('prepare');
+    
+    schedule(() => {
+      addAgentResponse(
+        'First, let\'s prepare your data file. You can download our template or use your own Excel/CSV file with the required columns.',
+        undefined, // No component initially
+        [
+          {
+            id: 'download-template',
+            label: 'Download Excel Template',
+            icon: 'Download'
+          },
+          {
+            id: 'use-own-file',
+            label: 'I have my own file ready',
+            icon: 'FileCheck'
+          }
+        ], // suggestedActions
+        undefined, // sources
+        'prepare' // stepId
+      );
+      
+      // Update message with suggested actions that handle clicks
+      setMessages(prev => {
+        const lastMessage = prev[prev.length - 1];
+        if (lastMessage && lastMessage.stepId === 'prepare') {
+          return prev.slice(0, -1).concat({
+            ...lastMessage,
+            suggestedActions: [
+              {
+                id: 'download-template',
+                label: 'Download Excel Template',
+                icon: 'Download',
+                onClick: () => handleDownloadTemplate()
+              },
+              {
+                id: 'use-own-file',
+                label: 'I have my own file ready',
+                icon: 'FileCheck',
+                onClick: () => proceedToBulkUploadFile()
+              }
+            ]
+          });
+        }
+        return prev;
+      });
+    }, 500);
+  }, [addMessage, markStepCompleted, schedule, setMessages]);
+
+  const handleDownloadTemplate = useCallback(() => {
+    addSimpleMessage('Download Excel Template', 'user');
+    
+    // In a real app, this would trigger a download
+    schedule(() => {
+      addMessage(
+        'Template downloaded! The file includes all required columns with example data. Once you\'ve filled it out, you can proceed to upload.',
+        'assistant',
+        {
+          component: (
+            <Alert
+              kind="alert"
+              type="info"
+              title="Template Downloaded"
+              message="Check your downloads folder for 'client_upload_template.xlsx'"
+            />
+          ),
+          suggestedActions: [
+            {
+              id: 'ready-to-upload',
+              label: 'Ready to Upload',
+              icon: 'Upload',
+              onClick: () => proceedToBulkUploadFile()
+            }
+          ]
+        }
+      );
+    }, 500);
+  }, [addMessage, schedule]);
+
+  const proceedToBulkUploadFile = useCallback(() => {
+    addSimpleMessage('Ready to Upload', 'user');
+    
+    // Mark prepare step as completed
+    markStepCompleted('prepare');
+    setCurrentStep('upload');
+    
+    schedule(() => {
+      addMessage(
+        'Great! Now upload your Excel or CSV file with the client data. I\'ll validate it and generate credentials automatically.',
+        'assistant',
+        {
+          component: (
             <FileDrop
               kind="filedrop"
-              title="Bulk Client Upload"
-              description="Upload multiple clients using Excel template"
+              title="Upload Client Data"
+              description="Upload your Excel (.xlsx, .xls) or CSV file"
               accept=".xlsx,.xls,.csv"
               multiple={false}
               maxSizeMb={10}
               onUploadStart={(files) => {
-                console.log('Bulk upload started:', files);
-                // Simulate upload processing
-                setTimeout(() => {
-                  handleBulkUploadComplete(files[0]);
-                }, 2000);
+                handleBulkFileUpload(files[0]);
               }}
+              disabled={completedSteps.has('upload') && currentStep !== 'upload'}
+              locked={completedSteps.has('upload') && currentStep !== 'upload'}
             />
-            <div className="flex gap-3">
-              <Button 
-                onClick={() => handleBulkUploadComplete(new File([''], 'sample.xlsx'))}
-                className="font-medium"
-              >
-                Continue
-              </Button>
-            </div>
-          </div>
-        ),
-        stepId: 'bulk-upload'
-      }
-    );
-  }, [addMessage, setCurrentStep]);
+          ),
+          stepId: 'upload'
+        }
+      );
+    }, 500);
+  }, [addMessage, markStepCompleted, completedSteps, currentStep, schedule]);
 
-
-  const handleBulkUploadComplete = useCallback((file: File) => {
+  const handleBulkFileUpload = useCallback((file: File) => {
     addSimpleMessage(`Uploaded: ${file.name}`, 'user');
-    markStepCompleted('bulk-upload');
-    setCurrentStep('processing');
-
-    // Show processing state
+    
+    // Mark upload as completed
+    markStepCompleted('upload');
+    setCurrentStep('validate');
+    
+    // Start validation process
     schedule(() => {
       addMessage(
-        'Processing your bulk client upload. Please wait while I validate and create the clients...',
+        'File received! Now validating the data format and checking for any issues...',
+        'assistant',
+        {
+          component: (
+            <ProcessState
+              kind="process"
+              title="Validating Data"
+              status="processing"
+              message="Checking file format and data integrity..."
+              details={[
+                'Verifying column headers',
+                'Checking required fields',
+                'Validating email formats',
+                'Detecting duplicates'
+              ]}
+            />
+          ),
+          stepId: 'validate'
+        }
+      );
+      
+      // Simulate validation completion
+      schedule(() => {
+        handleValidationComplete(file);
+      }, 2000);
+    }, 500);
+  }, [addMessage, markStepCompleted, schedule]);
+
+  const handleValidationComplete = useCallback((file: File) => {
+    // Update validation message to show success
+    setMessages(prev => prev.map(msg => {
+      if (msg.stepId === 'validate' && msg.component) {
+        return {
+          ...msg,
+          component: (
+            <ProcessState
+              kind="process"
+              title="Validation Complete"
+              status="success"
+              message="All data validated successfully!"
+              details={[
+                '✓ 25 valid client records found',
+                '✓ All required fields present',
+                '✓ Email formats valid',
+                '✓ No duplicates detected'
+              ]}
+            />
+          )
+        };
+      }
+      return msg;
+    }));
+    
+    // Mark validation as completed
+    markStepCompleted('validate');
+    setCurrentStep('processing');
+    
+    // Start processing
+    schedule(() => {
+      addMessage(
+        'Validation successful! Now creating client accounts and generating secure credentials...',
         'assistant',
         {
           component: (
@@ -1267,92 +1443,156 @@ export function ConversationalChat({
               variant="progress"
               title="Processing Bulk Upload"
               steps={[
-                { id: 'validate', title: 'Validating file format' },
-                { id: 'parse', title: 'Parsing client data' },
-                { id: 'create', title: 'Creating client accounts' },
-                { id: 'generate', title: 'Generating credentials' },
-                { id: 'notify', title: 'Sending welcome emails' }
+                { id: 'create-accounts', title: 'Creating client accounts' },
+                { id: 'generate-credentials', title: 'Generating secure credentials' },
+                { id: 'setup-delivery', title: 'Setting up delivery methods' },
+                { id: 'send-emails', title: 'Sending welcome emails' }
               ]}
               status={{
-                'validate': 'done',
-                'parse': 'current',
-                'create': 'todo',
-                'generate': 'todo',
-                'notify': 'todo'
+                'create-accounts': 'current',
+                'generate-credentials': 'todo',
+                'setup-delivery': 'todo',
+                'send-emails': 'todo'
               }}
-              current="parse"
+              current="create-accounts"
+              locked={completedSteps.has('processing') && currentStep !== 'processing'}
+              disabled={completedSteps.has('processing') && currentStep !== 'processing'}
             />
           ),
           stepId: 'processing'
         }
       );
-
-      // Simulate processing steps
-      let stepIndex = 1;
-      const steps = ['parse', 'create', 'generate', 'notify'];
-      const processInterval = setInterval(() => {
-        if (stepIndex < steps.length) {
-          // Update progress (in a real app, this would come from server)
-          stepIndex++;
-          if (stepIndex === steps.length) {
-            clearInterval(processInterval);
-            handleBulkUploadSuccess();
-          }
-        }
-      }, 1500);
+      
+      // Simulate processing completion
+      schedule(() => {
+        handleBulkUploadSuccess();
+      }, 3000);
     }, 1000);
-  }, [addMessage, markStepCompleted, schedule]);
+  }, [addMessage, markStepCompleted, completedSteps, currentStep, schedule, setMessages]);
+
 
   const handleBulkUploadSuccess = useCallback(() => {
+    // Update processing step to show completion
+    setMessages(prev => prev.map(msg => {
+      if (msg.stepId === 'processing' && msg.component) {
+        return {
+          ...msg,
+          component: (
+            <Steps
+              kind="steps"
+              variant="progress"
+              title="Processing Complete"
+              steps={[
+                { id: 'create-accounts', title: 'Creating client accounts' },
+                { id: 'generate-credentials', title: 'Generating secure credentials' },
+                { id: 'setup-delivery', title: 'Setting up delivery methods' },
+                { id: 'send-emails', title: 'Sending welcome emails' }
+              ]}
+              status={{
+                'create-accounts': 'done',
+                'generate-credentials': 'done',
+                'setup-delivery': 'done',
+                'send-emails': 'done'
+              }}
+              current="send-emails"
+              locked={true}
+              disabled={true}
+            />
+          )
+        };
+      }
+      return msg;
+    }));
+    
     markStepCompleted('processing');
     setCurrentStep('results');
     
     schedule(() => {
+      addAgentResponse(
+        'Excellent! All 25 clients have been successfully created with secure credentials. Welcome emails have been sent to each client with their login information.',
+        <div className="space-y-4">
+          <Alert
+            kind="alert"
+            type="success"
+            title="Upload Complete!"
+            message="All clients have been created and welcome emails sent."
+            locked={completedSteps.has('results') && currentStep !== 'results'}
+          />
+          
+          <SummaryCard
+            kind="summary"
+            title="Upload Results"
+            items={[
+              {
+                id: 'total',
+                title: 'Total Clients Processed',
+                subtitle: '25',
+                status: 'success' as const,
+                message: 'All clients successfully created'
+              },
+              {
+                id: 'credentials',
+                title: 'Credentials Generated',
+                subtitle: '25',
+                status: 'success' as const,
+                message: 'Unique usernames and secure passwords'
+              },
+              {
+                id: 'emails',
+                title: 'Welcome Emails Sent',
+                subtitle: '25', 
+                status: 'success' as const,
+                message: 'Clients notified with login details'
+              }
+            ]}
+            actions={[
+              { id: 'download-report', label: 'Download Report', onClick: () => handleDownloadReport() },
+              { id: 'view-clients', label: 'View Clients', onClick: () => handleViewClients() }
+            ]}
+            locked={completedSteps.has('results') && currentStep !== 'results'}
+            disabled={completedSteps.has('results') && currentStep !== 'results'}
+          />
+        </div>,
+        [
+          {
+            id: 'new-bulk-upload',
+            label: 'Upload More Clients',
+            icon: 'Upload',
+            onClick: () => handleToolSelection('bulk-client-upload')
+          },
+          {
+            id: 'configure-delivery',
+            label: 'Configure Delivery Methods',
+            icon: 'Settings',
+            onClick: () => handleUnimplementedTool('delivery-configuration')
+          },
+          {
+            id: 'done',
+            label: 'Done',
+            icon: 'Check',
+            onClick: () => handleResetToWelcome()
+          }
+        ], // suggestedActions
+        undefined, // sources
+        'results' // stepId
+      );
+    }, 500);
+  }, [addMessage, markStepCompleted, completedSteps, currentStep, schedule, setMessages, handleToolSelection, handleUnimplementedTool, handleResetToWelcome]);
+
+  const handleDownloadReport = useCallback(() => {
+    addSimpleMessage('Download Report', 'user');
+    schedule(() => {
       addMessage(
-        'Bulk client upload completed successfully! Here\'s a summary of what was created:',
+        'Report downloaded! The Excel file contains all client details including their generated credentials.',
         'assistant',
         {
           component: (
-            <div className="space-y-4">
-              <Alert
-                kind="alert"
-                type="success"
-                title="Upload Complete!"
-                message="All clients have been created and welcome emails sent."
-              />
-              
-              <SummaryCard
-                kind="summary"
-                title="Upload Results"
-                items={[
-                  {
-                    id: 'total',
-                    title: 'Total Clients Processed',
-                    subtitle: '25',
-                    status: 'success' as const,
-                    message: 'All clients successfully created'
-                  },
-                  {
-                    id: 'credentials',
-                    title: 'Credentials Generated',
-                    subtitle: '25',
-                    status: 'success' as const,
-                    message: 'Unique usernames and secure passwords'
-                  },
-                  {
-                    id: 'emails',
-                    title: 'Welcome Emails Sent',
-                    subtitle: '25', 
-                    status: 'success' as const,
-                    message: 'Clients notified with login details'
-                  }
-                ]}
-                actions={[
-                  { id: 'download-report', label: 'Download Report' },
-                  { id: 'view-clients', label: 'View Clients' }
-                ]}
-              />
-            </div>
+            <Alert
+              kind="alert"
+              type="info"
+              title="Report Downloaded"
+              message="Check your downloads folder for 'bulk_upload_report.xlsx'"
+            />
           ),
           stepId: 'results'
         }
@@ -1386,6 +1626,37 @@ export function ConversationalChat({
       }, 1000);
     }, 500);
   }, [addMessage, markStepCompleted, schedule, handleToolSelection]);
+
+  const handleViewClients = useCallback(() => {
+    addSimpleMessage('View Clients', 'user');
+    schedule(() => {
+      addMessage(
+        'Opening client management dashboard where you can view and manage all uploaded clients.',
+        'assistant',
+        {
+          component: (
+            <Alert
+              kind="alert"
+              type="info"
+              title="Redirecting to Client Management"
+              message="You can view, edit, and manage all your clients from the dashboard."
+            />
+          ),
+          stepId: 'results'
+        }
+      );
+    }, 500);
+  }, [addMessage, schedule]);
+
+  const handleResetToWelcome = useCallback(() => {
+    addSimpleMessage('Done', 'user');
+    resetSession();
+    setFlowActive(false);
+    schedule(() => {
+      // Show welcome message again
+      showWelcomeMessage();
+    }, 500);
+  }, [resetSession, schedule, showWelcomeMessage]);
 
   const handleUserInput = useCallback((input: string) => {
     const lowerInput = input.toLowerCase();
