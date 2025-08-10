@@ -1,38 +1,64 @@
 import React, { useCallback } from 'react';
-import { Check, Lock } from 'lucide-react';
-import { ModuleContainer } from './shared';
-import { LockableModule, ModuleCallbacks } from './shared/types';
+import { Button } from '../ui/button';
+import { Alert, AlertDescription } from '../ui/alert';
+import { HelpCircle, Check, Lock } from 'lucide-react';
 
 type StepStatus = 'done' | 'current' | 'todo' | 'incomplete' | 'blocked';
 
-export type Step = {
+type Step = {
   id: string;
   title: string;
   hint?: string;
   optional?: boolean;
 };
 
-export interface StepsModule extends LockableModule {
+type Action = { 
+  id: string; 
+  label: string; 
+  variant?: 'default' | 'secondary' | 'ghost'; 
+  disabled?: boolean; 
+};
+
+type StepsModule = {
+  id?: string;
+  title?: string;
+  description?: string;
+  helpUrl?: string;
+  loading?: boolean;
+  error?: string;
+  empty?: string;
+  actions?: Action[];
   kind: 'steps';
+  locked?: boolean;
   variant: 'overview' | 'progress';
   steps: Step[];
   status?: Record<string, StepStatus>;
   current?: string;
   showIndex?: boolean;
   maxVisible?: number;
+};
+
+interface StepsProps extends StepsModule {
+  onAction?: (actionId: string, data?: any) => void;
 }
 
-export interface StepsProps extends StepsModule, ModuleCallbacks {}
-
 export function Steps({
+  id,
+  title,
+  description,
+  helpUrl,
+  loading = false,
+  error,
+  empty,
+  actions = [],
   variant,
   steps,
   status = {},
   current,
   showIndex = true,
   maxVisible,
-  onAction,
-  ...baseProps
+  locked = false,
+  onAction
 }: StepsProps) {
   const getStepStatus = useCallback((step: Step): StepStatus => {
     if (variant === 'overview') {
@@ -117,9 +143,31 @@ export function Steps({
   const visibleSteps = maxVisible ? steps.slice(0, maxVisible) : steps;
   const hiddenCount = maxVisible ? Math.max(0, steps.length - maxVisible) : 0;
 
-  if (baseProps.loading) {
+  if (loading) {
     return (
-      <ModuleContainer {...baseProps} onAction={onAction}>
+      <div className="space-y-6">
+        {/* Header */}
+        {(title || description) && (
+          <div className="space-y-2">
+            {title && (
+              <div className="flex items-center gap-1">
+                <h3 className="font-medium">{title}</h3>
+                {helpUrl && (
+                  <Button variant="ghost" size="sm" asChild className="h-4 w-4 p-0">
+                    <a href={helpUrl} target="_blank" rel="noopener noreferrer">
+                      <HelpCircle className="h-3 w-3" />
+                    </a>
+                  </Button>
+                )}
+              </div>
+            )}
+            {description && (
+              <p className="text-sm text-muted-foreground">{description}</p>
+            )}
+          </div>
+        )}
+
+        {/* Loading State */}
         <div className="space-y-4">
           {Array.from({ length: 3 }).map((_, index) => (
             <div key={index} className="flex items-center gap-3 animate-pulse">
@@ -131,25 +179,76 @@ export function Steps({
             </div>
           ))}
         </div>
-      </ModuleContainer>
+      </div>
     );
   }
 
   if (steps.length === 0) {
     return (
-      <ModuleContainer 
-        {...baseProps} 
-        onAction={onAction}
-        empty={baseProps.empty || 'No steps available'}
-      >
-        {/* Empty content - handled by ModuleContainer */}
-      </ModuleContainer>
+      <div className="space-y-6">
+        {/* Header */}
+        {(title || description) && (
+          <div className="space-y-2">
+            {title && (
+              <div className="flex items-center gap-1">
+                <h3 className="font-medium">{title}</h3>
+                {helpUrl && (
+                  <Button variant="ghost" size="sm" asChild className="h-4 w-4 p-0">
+                    <a href={helpUrl} target="_blank" rel="noopener noreferrer">
+                      <HelpCircle className="h-3 w-3" />
+                    </a>
+                  </Button>
+                )}
+              </div>
+            )}
+            {description && (
+              <p className="text-sm text-muted-foreground">{description}</p>
+            )}
+          </div>
+        )}
+
+        <Alert>
+          <AlertDescription>{empty || 'No steps available'}</AlertDescription>
+        </Alert>
+      </div>
     );
   }
 
   return (
-    <ModuleContainer {...baseProps} onAction={onAction}>
-      {/* Steps Content */}
+    <div className={`space-y-6 ${
+      locked 
+        ? 'opacity-60 pointer-events-none' 
+        : ''
+    }`}>
+      {/* Header */}
+      {(title || description) && (
+        <div className="space-y-2">
+          {title && (
+            <div className="flex items-center gap-2">
+              <h3 className="text-lg font-medium">{title}</h3>
+              {helpUrl && (
+                <Button variant="ghost" size="sm" asChild className="h-4 w-4 p-0">
+                  <a href={helpUrl} target="_blank" rel="noopener noreferrer">
+                    <HelpCircle className="h-3 w-3" />
+                  </a>
+                </Button>
+              )}
+            </div>
+          )}
+          {description && (
+            <p className="text-sm text-muted-foreground">{description}</p>
+          )}
+        </div>
+      )}
+
+      {/* Error Alert */}
+      {error && (
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
+      {/* Steps Content - no container, direct content */}
       <div className="space-y-4">
         {visibleSteps.map((step, index) => (
             <div key={step.id} className="flex items-start gap-4">
@@ -187,6 +286,22 @@ export function Steps({
           </div>
         )}
       </div>
-    </ModuleContainer>
+
+      {/* Actions */}
+      {actions.length > 0 && (
+        <div className="flex items-center gap-3">
+          {actions.map((action) => (
+            <Button
+              key={action.id}
+              variant={action.variant || 'outline'}
+              disabled={loading || locked || action.disabled}
+              onClick={() => onAction?.(action.id)}
+            >
+              {action.label}
+            </Button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

@@ -79,11 +79,11 @@ export function HelpSources({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 sm:gap-3 md:gap-4">
       {results.map((result) => (
-        <Card 
+        <div 
           key={result.id} 
-          className="p-4 border border-border hover:bg-accent/50 transition-all duration-200 cursor-pointer group"
+          className="p-4 border border-border rounded-lg hover:bg-accent/50 transition-all duration-200 cursor-pointer group"
           onClick={() => handleResultClick(result)}
         >
           <div className="flex flex-col h-full">
@@ -107,7 +107,7 @@ export function HelpSources({
               <ExternalLink className="w-3 h-3 text-muted-foreground group-hover:text-foreground transition-colors flex-shrink-0" />
             </div>
           </div>
-        </Card>
+        </div>
       ))}
     </div>
   );

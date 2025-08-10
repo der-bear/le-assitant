@@ -69,6 +69,8 @@ export function FileDrop({
   onUploadComplete,
   onUploadError
 }: FileDropProps) {
+  // Provide default description if none is given
+  const effectiveDescription = description || (title ? "File upload with drag-and-drop support and validation" : undefined);
   const [files, setFiles] = useState<UploadFile[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -236,11 +238,11 @@ export function FileDrop({
   return (
     <div className="space-y-6">
       {/* Header */}
-      {(title || description) && (
+      {(title || effectiveDescription) && (
         <div className="space-y-1">
           {title && (
             <div className="flex items-center gap-1">
-              <h3 className="font-medium">{title}</h3>
+              <h3 className="text-base font-medium">{title}</h3>
               {helpUrl && (
                 <Button variant="ghost" size="sm" asChild className="h-4 w-4 p-0">
                   <a href={helpUrl} target="_blank" rel="noopener noreferrer">
@@ -250,8 +252,8 @@ export function FileDrop({
               )}
             </div>
           )}
-          {description && (
-            <p className="text-sm text-muted-foreground">{description}</p>
+          {effectiveDescription && (
+            <p className="text-sm text-muted-foreground">{effectiveDescription}</p>
           )}
         </div>
       )}

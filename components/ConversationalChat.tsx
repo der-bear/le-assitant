@@ -22,15 +22,39 @@ import {
   ExternalLink
 } from 'lucide-react';
 
+interface SuggestedAction {
+  id: string;
+  label: string;
+  variant?: 'default' | 'outline' | 'secondary' | 'ghost';
+  icon?: React.ReactNode;
+  disabled?: boolean;
+  onClick: () => void;
+}
+
+interface MessageSource {
+  id: string;
+  title: string;
+  url: string;
+  type: 'documentation' | 'api' | 'guide' | 'reference';
+}
+
 interface Message {
   id: string;
   content: string;
   sender: 'user' | 'assistant';
   timestamp: Date;
-  component?: React.ReactNode;
+  
+  // AI Agent Message Slots
+  component?: React.ReactNode;           // UI Module slot
+  suggestedActions?: SuggestedAction[];  // Actions slot
+  sources?: MessageSource[];             // Sources slot
+  
+  // Message properties
   isWelcome?: boolean;
   isLocked?: boolean;
   stepId?: string;
+  priority?: 'low' | 'normal' | 'high';
+  category?: string;
 }
 
 interface ConversationalChatProps {
@@ -120,19 +144,57 @@ export function ConversationalChat({
     return id;
   }, [messageCounter]);
 
-  const addMessage = useCallback((content: string, sender: 'user' | 'assistant', component?: React.ReactNode, isWelcome = false, stepId?: string) => {
+  // Enhanced message creation with proper AI agent slots
+  const addMessage = useCallback((
+    content: string,
+    sender: 'user' | 'assistant',
+    options: {
+      component?: React.ReactNode;
+      suggestedActions?: SuggestedAction[];
+      sources?: MessageSource[];
+      isWelcome?: boolean;
+      stepId?: string;
+      priority?: 'low' | 'normal' | 'high';
+      category?: string;
+    } = {}
+  ) => {
     const message: Message = {
       id: generateMessageId(),
       content,
       sender,
       timestamp: new Date(),
-      component,
-      isWelcome,
+      component: options.component,
+      suggestedActions: options.suggestedActions,
+      sources: options.sources,
+      isWelcome: options.isWelcome || false,
       isLocked: false,
-      stepId
+      stepId: options.stepId,
+      priority: options.priority || 'normal',
+      category: options.category
     };
     setMessages(prev => [...prev, message]);
   }, [generateMessageId]);
+
+  // Convenience helper for simple messages
+  const addSimpleMessage = useCallback((content: string, sender: 'user' | 'assistant') => {
+    addMessage(content, sender);
+  }, [addMessage]);
+
+  // Convenience helper for AI agent responses with modules and actions
+  const addAgentResponse = useCallback((
+    content: string,
+    component?: React.ReactNode,
+    suggestedActions?: SuggestedAction[],
+    sources?: MessageSource[],
+    stepId?: string
+  ) => {
+    addMessage(content, 'assistant', {
+      component,
+      suggestedActions,
+      sources,
+      stepId
+    });
+  }, [addMessage]);
 
   // Helper function to add a processing message that auto-removes after delay
   const addProcessingMessage = useCallback((content: string, detail: string, duration = 2500) => {
@@ -365,7 +427,7 @@ export function ConversationalChat({
     addMessage(
       `The "${toolDisplayName}" tool isn't implemented yet, but I can assist you with the configuration. I can still help you configure this manually - just describe what you'd like to set up, and I'll guide you through the process.`,
       'assistant',
-      suggestionButtons
+      suggestionButtons ? { component: suggestionButtons } : {}
     );
 
     // Help sources as separate message
@@ -373,33 +435,14 @@ export function ConversationalChat({
       addMessage(
         `Here are some helpful resources that can guide you through ${toolInfo.category.toLowerCase()} configuration and best practices:`,
         'assistant',
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
-          {(helpSources[toolInfo.category] || helpSources['General']).map((source) => (
-            <div
-              key={source.id}
-              className="p-4 border border-border rounded-lg hover:bg-accent/50 cursor-pointer transition-all duration-200 group"
-              onClick={() => window.open(source.url, '_blank', 'noopener,noreferrer')}
-            >
-              <div className="flex flex-col h-full">
-                <div className="flex items-center justify-between gap-2 mb-2">
-                  <span className="text-xs text-muted-foreground capitalize">
-                    {source.kind}
-                  </span>
-                  <ExternalLink className="w-3 h-3 text-muted-foreground group-hover:text-foreground transition-colors flex-shrink-0" />
-                </div>
-                
-                <div className="flex-1">
-                  <h3 className="text-sm font-medium text-foreground group-hover:text-foreground transition-colors mb-1">
-                    {source.title}
-                  </h3>
-                  <p className="text-xs text-muted-foreground line-clamp-2">
-                    {source.description}
-                  </p>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
+        {
+          component: (
+            <HelpSources
+              kind="help-sources"
+              results={helpSources[toolInfo.category] || helpSources['General']}
+            />
+          )
+        }
       );
     }, 300);
   }, [addMessage]);
@@ -431,7 +474,7 @@ export function ConversationalChat({
     };
 
     const toolName = toolNames[toolId] || toolId;
-    addMessage(`${toolName}`, 'user');
+    addSimpleMessage(`${toolName}`, 'user');
 
     setCurrentFlow(toolId);
     setCompletedSteps(new Set());
@@ -465,7 +508,7 @@ export function ConversationalChat({
         'bulk-client-upload': 'Bulk Client Upload'
       };
       const toolName = toolNames[selectedTool] || selectedTool;
-      addMessage(`${toolName}`, 'user');
+      addSimpleMessage(`${toolName}`, 'user');
       
       schedule(() => {
         startGuidedFlow(selectedTool);
@@ -498,31 +541,34 @@ export function ConversationalChat({
     addMessage(
       'I\'ll guide you through the LeadExec client setup process. Here\'s what we\'ll accomplish together:',
       'assistant',
-      <div className="space-y-4">
-        <Steps
-          kind="steps"
-          variant="overview"
-          steps={steps}
-          title="Client Setup Process"
-          showIndex={true}
-          locked={false}
-        />
-        <Button 
-          onClick={() => proceedToBasicInfo()} 
-          className="gap-2 font-medium"
-          disabled={false}
-        >
-          <ArrowRight className="w-4 h-4" />
-          Start Setup
-        </Button>
-      </div>,
-      false,
-      'setup-overview'
+      {
+        component: (
+          <div className="space-y-4">
+            <Steps
+              kind="steps"
+              variant="overview"
+              steps={steps}
+              title="Client Setup Process"
+              showIndex={true}
+              locked={false}
+            />
+            <Button 
+              onClick={() => proceedToBasicInfo()} 
+              className="gap-2 font-medium"
+              disabled={false}
+            >
+              <ArrowRight className="w-4 h-4" />
+              Start Setup
+            </Button>
+          </div>
+        ),
+        stepId: 'setup-overview'
+      }
     );
   }, [addMessage]);
 
   const proceedToBasicInfo = useCallback(() => {
-    addMessage('Start Setup', 'user');
+    addSimpleMessage('Start Setup', 'user');
     
     // Mark setup overview as completed
     markStepCompleted('setup-overview');
@@ -594,9 +640,8 @@ export function ConversationalChat({
         }
       ];
 
-      addMessage(
+      addAgentResponse(
         'Great! Let\'s start with the basic client information. I\'ll automatically generate secure credentials once you provide the company name and email.',
-        'assistant',
         <Form
           kind="form"
           title="Client Information"
@@ -631,8 +676,9 @@ export function ConversationalChat({
           disabled={completedSteps.has('basic-info') && currentStep !== 'basic-info'}
           locked={completedSteps.has('basic-info') && currentStep !== 'basic-info'}
         />,
-        false,
-        'basic-info'
+        undefined, // suggestedActions
+        undefined, // sources  
+        'basic-info' // stepId
       );
     }, 500);
   }, [addMessage, completedSteps, currentStep, derivedValues, schedule]);
@@ -696,7 +742,7 @@ export function ConversationalChat({
   }, []);
 
   const handleBasicInfoSubmit = useCallback((data: Record<string, any>) => {
-    addMessage(`Company: ${data.companyName}, Email: ${data.email}`, 'user');
+    addSimpleMessage(`Company: ${data.companyName}, Email: ${data.email}`, 'user');
     
     // Clear derived values after submit
     setDerivedValues({});
@@ -737,19 +783,22 @@ export function ConversationalChat({
       addMessage(
         `Perfect! I've got the client information for ${data.companyName}. Now let's choose how leads will be delivered:`,
         'assistant',
-        <ChoiceList
-          kind="choices"
-          title="Choose Delivery Method"
-          description="Select how leads will be sent to your client"
-          options={deliveryOptions}
-          mode="single"
-          layout="card"
-          onChange={(value) => handleDeliveryMethodSelect(value as string)}
-          disabled={completedSteps.has('delivery-method') && currentStep !== 'delivery-method'}
-          locked={completedSteps.has('delivery-method') && currentStep !== 'delivery-method'}
-        />,
-        false,
-        'delivery-method'
+        {
+          component: (
+            <ChoiceList
+              kind="choices"
+              title="Choose Delivery Method"
+              description="Select how leads will be sent to your client"
+              options={deliveryOptions}
+              mode="single"
+              layout="card"
+              onChange={(value) => handleDeliveryMethodSelect(value as string)}
+              disabled={completedSteps.has('delivery-method') && currentStep !== 'delivery-method'}
+              locked={completedSteps.has('delivery-method') && currentStep !== 'delivery-method'}
+            />
+          ),
+          stepId: 'delivery-method'
+        }
       );
     }, 500);
   }, [addMessage, markStepCompleted, completedSteps, currentStep, schedule]);
@@ -762,7 +811,7 @@ export function ConversationalChat({
       'skip': 'Skip for Now'
     };
     
-    addMessage(`Selected: ${methodLabels[method] || method}`, 'user');
+    addSimpleMessage(`Selected: ${methodLabels[method] || method}`, 'user');
     
     // Mark delivery method step as completed
     markStepCompleted('delivery-method');
@@ -774,108 +823,152 @@ export function ConversationalChat({
         addMessage(
           'Configure email delivery settings for your client.',
           'assistant',
-          <Form
-            kind="form"
-            title="Email Delivery Configuration"
-            description="Set up how leads will be delivered via email"
-            fields={[
-              {
-                id: 'emailAddress',
-                label: 'Delivery Email Address',
-                type: 'email' as const,
-                required: true,
-                placeholder: 'Enter client email address'
-              },
-              {
-                id: 'emailFormat',
-                label: 'Email Format',
-                type: 'select' as const,
-                required: true,
-                value: 'html',
-                options: [
-                  { value: 'html', label: 'HTML Format' },
-                  { value: 'plain', label: 'Plain Text' }
-                ]
-              },
-              {
-                id: 'includeAttachment',
-                label: 'Include Lead Details as Attachment',
-                type: 'checkbox' as const,
-                value: true
-              }
-            ]}
-            submitLabel="Continue to Configuration"
-            onSubmit={handleDeliveryConfigSubmit}
-            disabled={completedSteps.has('delivery-config') && currentStep !== 'delivery-config'}
-            locked={completedSteps.has('delivery-config') && currentStep !== 'delivery-config'}
-          />,
-          false,
-          'delivery-config'
+          {
+            component: (
+              <Form
+                kind="form"
+                title="Email Delivery Configuration"
+                description="Set up how leads will be delivered via email"
+                fields={[
+                  {
+                    id: 'emailAddress',
+                    label: 'Delivery Email Address',
+                    type: 'email' as const,
+                    required: true,
+                    placeholder: 'Enter client email address'
+                  },
+                  {
+                    id: 'emailFormat',
+                    label: 'Email Format',
+                    type: 'select' as const,
+                    required: true,
+                    value: 'html',
+                    options: [
+                      { value: 'html', label: 'HTML Format' },
+                      { value: 'plain', label: 'Plain Text' }
+                    ]
+                  },
+                  {
+                    id: 'includeAttachment',
+                    label: 'Include Lead Details as Attachment',
+                    type: 'checkbox' as const,
+                    value: true
+                  }
+                ]}
+                validations={[
+                  {
+                    fieldId: 'emailAddress',
+                    rule: 'required' as const,
+                    message: 'Email address is required'
+                  },
+                  {
+                    fieldId: 'emailAddress',
+                    rule: 'regex' as const,
+                    pattern: '^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$',
+                    message: 'Please enter a valid email address'
+                  },
+                  {
+                    fieldId: 'emailFormat',
+                    rule: 'required' as const,
+                    message: 'Email format is required'
+                  }
+                ]}
+                submitLabel="Continue to Configuration"
+                onSubmit={handleDeliveryConfigSubmit}
+                disabled={completedSteps.has('delivery-config') && currentStep !== 'delivery-config'}
+                locked={completedSteps.has('delivery-config') && currentStep !== 'delivery-config'}
+              />
+            ),
+            stepId: 'delivery-config'
+          }
         );
       } else if (method === 'webhook') {
         addMessage(
           'Configure webhook delivery settings for real-time lead integration.',
           'assistant',
-          <Form
-            kind="form"
-            title="HTTP Webhook Configuration"
-            description="Set up real-time API delivery to client systems"
-            fields={[
-              {
-                id: 'webhookUrl',
-                label: 'Webhook URL',
-                type: 'url' as const,
-                required: true,
-                placeholder: 'https://client.example.com/webhook/leads'
-              },
-              {
-                id: 'webhookSecret',
-                label: 'Webhook Secret',
-                type: 'password' as const,
-                placeholder: 'Optional authentication secret'
-              },
-              {
-                id: 'webhookMethod',
-                label: 'HTTP Method',
-                type: 'select' as const,
-                required: true,
-                value: 'POST',
-                options: [
-                  { value: 'POST', label: 'POST' },
-                  { value: 'PUT', label: 'PUT' }
-                ]
-              }
-            ]}
-            submitLabel="Continue to Configuration"
-            onSubmit={handleDeliveryConfigSubmit}
-            disabled={completedSteps.has('delivery-config') && currentStep !== 'delivery-config'}
-            locked={completedSteps.has('delivery-config') && currentStep !== 'delivery-config'}
-          />,
-          false,
-          'delivery-config'
+          {
+            component: (
+              <Form
+                kind="form"
+                title="HTTP Webhook Configuration"
+                description="Set up real-time API delivery to client systems"
+                fields={[
+                  {
+                    id: 'webhookUrl',
+                    label: 'Webhook URL',
+                    type: 'url' as const,
+                    required: true,
+                    placeholder: 'https://client.example.com/webhook/leads'
+                  },
+                  {
+                    id: 'webhookSecret',
+                    label: 'Webhook Secret',
+                    type: 'password' as const,
+                    placeholder: 'Optional authentication secret'
+                  },
+                  {
+                    id: 'webhookMethod',
+                    label: 'HTTP Method',
+                    type: 'select' as const,
+                    required: true,
+                    value: 'POST',
+                    options: [
+                      { value: 'POST', label: 'POST' },
+                      { value: 'PUT', label: 'PUT' }
+                    ]
+                  }
+                ]}
+                validations={[
+                  {
+                    fieldId: 'webhookUrl',
+                    rule: 'required' as const,
+                    message: 'Webhook URL is required'
+                  },
+                  {
+                    fieldId: 'webhookUrl',
+                    rule: 'regex' as const,
+                    pattern: '^https?://[^\\s]+$',
+                    message: 'Please enter a valid URL'
+                  },
+                  {
+                    fieldId: 'webhookMethod',
+                    rule: 'required' as const,
+                    message: 'HTTP method is required'
+                  }
+                ]}
+                submitLabel="Continue to Configuration"
+                onSubmit={handleDeliveryConfigSubmit}
+                disabled={completedSteps.has('delivery-config') && currentStep !== 'delivery-config'}
+                locked={completedSteps.has('delivery-config') && currentStep !== 'delivery-config'}
+              />
+            ),
+            stepId: 'delivery-config'
+          }
         );
       } else if (method === 'ftp') {
         addMessage(
           'Upload an FTP template file or use our default format.',
           'assistant',
-          <div className="space-y-6">
-            <FileDrop
-              kind="filedrop"
-              title="FTP Configuration Template"
-              description="Upload your FTP configuration template"
-              accept=".csv,.xlsx,.xml"
-              multiple={false}
-              maxSizeMb={5}
-              note="Upload template file or we'll use the default format"
-            />
-            <div className="flex gap-3">
-              <Button onClick={() => handleDeliveryConfigSubmit({ useDefault: true })} className="font-medium">
-                Use Default Template
-              </Button>
-            </div>
-          </div>,
-          false,
-          'delivery-config'
+          {
+            component: (
+              <div className="space-y-6">
+                <FileDrop
+                  kind="filedrop"
+                  title="FTP Configuration Template"
+                  description="Upload your FTP configuration template"
+                  accept=".csv,.xlsx,.xml"
+                  multiple={false}
+                  maxSizeMb={5}
+                />
+                <div className="flex gap-3">
+                  <Button onClick={() => handleDeliveryConfigSubmit({ useDefault: true })} className="font-medium">
+                    Continue
+                  </Button>
+                </div>
+              </div>
+            ),
+            stepId: 'delivery-config'
+          }
         );
       } else {
         // Skip delivery configuration
@@ -886,7 +979,7 @@ export function ConversationalChat({
 
   const handleDeliveryConfigSubmit = useCallback((config: Record<string, any>) => {
     console.log('🔧 handleDeliveryConfigSubmit called with config:', config);
-    addMessage('Delivery configuration saved', 'user');
+    addSimpleMessage('Delivery configuration saved', 'user');
     
     // Mark delivery configuration as completed
     markStepCompleted('delivery-config');
@@ -898,73 +991,83 @@ export function ConversationalChat({
       addMessage(
         'Configure additional client settings and preferences.',
         'assistant',
-        <Form
-          kind="form"
-          title="Client Configuration"
-          description="Set up client preferences and limits"
-          sections={[
-            {
-              id: 'limits',
-              title: 'Lead Limits & Pricing',
-              fields: [
+        {
+          component: (
+            <Form
+              kind="form"
+              title="Client Configuration"
+              description="Set up client preferences and limits"
+              sections={[
                 {
-                  id: 'dailyLeadLimit',
-                  label: 'Daily Lead Limit',
-                  type: 'number' as const,
-                  value: 50,
-                  min: 1,
-                  max: 1000,
-                  placeholder: 'Maximum leads per day'
-                },
-                {
-                  id: 'leadPrice',
-                  label: 'Price Per Lead ($)',
-                  type: 'number' as const,
-                  value: 25,
-                  min: 1,
-                  placeholder: 'Cost per lead'
-                }
-              ]
-            },
-            {
-              id: 'filtering',
-              title: 'Lead Filtering',
-              fields: [
-                {
-                  id: 'leadTypes',
-                  label: 'Accepted Lead Types',
-                  type: 'select' as const,
-                  required: true,
-                  value: 'all',
-                  options: [
-                    { value: 'all', label: 'All Lead Types' },
-                    { value: 'residential', label: 'Residential Only' },
-                    { value: 'commercial', label: 'Commercial Only' },
-                    { value: 'custom', label: 'Custom Filter' }
+                  id: 'limits',
+                  title: 'Lead Limits & Pricing',
+                  fields: [
+                    {
+                      id: 'dailyLeadLimit',
+                      label: 'Daily Lead Limit',
+                      type: 'number' as const,
+                      value: 50,
+                      min: 1,
+                      max: 1000,
+                      placeholder: 'Maximum leads per day'
+                    },
+                    {
+                      id: 'leadPrice',
+                      label: 'Price Per Lead ($)',
+                      type: 'number' as const,
+                      value: 25,
+                      min: 1,
+                      placeholder: 'Cost per lead'
+                    }
                   ]
                 },
                 {
-                  id: 'excludeWeekends',
-                  label: 'Exclude Weekend Leads',
-                  type: 'checkbox' as const,
-                  value: false
+                  id: 'filtering',
+                  title: 'Lead Filtering',
+                  fields: [
+                    {
+                      id: 'leadTypes',
+                      label: 'Accepted Lead Types',
+                      type: 'select' as const,
+                      required: true,
+                      value: 'all',
+                      options: [
+                        { value: 'all', label: 'All Lead Types' },
+                        { value: 'residential', label: 'Residential Only' },
+                        { value: 'commercial', label: 'Commercial Only' },
+                        { value: 'custom', label: 'Custom Filter' }
+                      ]
+                    },
+                    {
+                      id: 'excludeWeekends',
+                      label: 'Exclude Weekend Leads',
+                      type: 'checkbox' as const,
+                      value: false
+                    }
+                  ]
                 }
-              ]
-            }
-          ]}
-          submitLabel="Create Client"
-          onSubmit={handleConfigurationSubmit}
-          disabled={completedSteps.has('configuration') && currentStep !== 'configuration'}
-          locked={completedSteps.has('configuration') && currentStep !== 'configuration'}
-        />,
-        false,
-        'configuration'
+              ]}
+              validations={[
+                {
+                  fieldId: 'leadTypes',
+                  rule: 'required' as const,
+                  message: 'Lead type selection is required'
+                }
+              ]}
+              submitLabel="Create Client"
+              onSubmit={handleConfigurationSubmit}
+              disabled={completedSteps.has('configuration') && currentStep !== 'configuration'}
+              locked={completedSteps.has('configuration') && currentStep !== 'configuration'}
+            />
+          ),
+          stepId: 'configuration'
+        }
       );
     }, 500);
   }, [addMessage, markStepCompleted, completedSteps, currentStep, schedule]);
 
   const handleConfigurationSubmit = useCallback((configData: Record<string, any>) => {
-    addMessage('Final configuration saved', 'user');
+    addSimpleMessage('Final configuration saved', 'user');
     markStepCompleted('configuration');
     setCurrentStep('creation');
 
@@ -977,9 +1080,8 @@ export function ConversationalChat({
 
       // Simulate client creation process - wait for processing to complete
       schedule(() => {
-        addMessage(
+        addAgentResponse(
           'Client creation completed successfully!',
-          'assistant',
           <SummaryCard
             kind="summary"
             title="Client Creation Summary"
@@ -1010,93 +1112,55 @@ export function ConversationalChat({
                 message: 'Daily limits and pricing configured'
               }
             ]}
-            actions={[
-              {
-                id: 'view-client',
-                label: 'View Client Dashboard',
-                variant: 'default' as const
-              },
-              {
-                id: 'send-test-lead',
-                label: 'Send Test Lead',
-                variant: 'secondary' as const
-              }
-            ]}
-            onAction={(actionId) => {
-              if (actionId === 'view-client') {
-                console.log('Navigate to client dashboard');
-              } else if (actionId === 'send-test-lead') {
-                console.log('Send test lead');
-              }
-            }}
-          />
-          // No stepId to keep it active
+          />,
+          [
+            {
+              id: 'monitor-delivery',
+              label: 'Monitor Lead Delivery',
+              variant: 'outline' as const,
+              onClick: () => console.log('Navigate to analytics dashboard')
+            },
+            {
+              id: 'share-portal',
+              label: 'Share Client Portal Access',
+              variant: 'outline' as const,
+              onClick: () => console.log('Show portal credentials')
+            },
+            {
+              id: 'create-another',
+              label: 'Create Another Client',
+              variant: 'outline' as const,
+              onClick: () => handleToolSelection('create-new-client')
+            }
+          ],
+          [
+            {
+              id: 'client-docs',
+              title: 'Client Management Guide',
+              url: 'https://docs.example.com/clients',
+              type: 'documentation' as const
+            },
+            {
+              id: 'lead-delivery',
+              title: 'Lead Delivery Setup',
+              url: 'https://docs.example.com/lead-delivery',
+              type: 'guide' as const
+            }
+          ]
         );
 
         markStepCompleted('creation');
-
-        // Step 4: Review & Next Steps
-        schedule(() => {
-          addMessage(
-            'Your client setup is complete! Here are some next steps you can take:',
-            'assistant',
-            <SummaryCard
-              kind="summary"
-              title="Next Steps"
-              items={[
-                {
-                  id: 'monitor-leads',
-                  title: 'Monitor Lead Delivery',
-                  subtitle: 'Track performance and delivery status',
-                  status: 'info' as const,
-                  message: 'Keep an eye on daily delivery metrics',
-                  link: {
-                    href: '/analytics/CL-2024-001',
-                    label: 'View Analytics'
-                  }
-                },
-                {
-                  id: 'client-portal',
-                  title: 'Share Client Portal Access',
-                  subtitle: 'Give your client login credentials',
-                  status: 'info' as const,
-                  message: 'Username: techcorp | Password: Auto-generated',
-                  link: {
-                    href: '/portal/credentials/CL-2024-001',
-                    label: 'Get Login Details'
-                  }
-                }
-              ]}
-              actions={[
-                {
-                  id: 'create-another',
-                  label: 'Create Another Client',
-                  variant: 'default' as const
-                }
-              ]}
-              onAction={(actionId) => {
-                if (actionId === 'create-another') {
-                  handleToolSelection('create-new-client');
-                }
-              }}
-            />,
-            false  // isWelcome = false
-            // No stepId parameter - keeps it active
-          );
-
-          // Don't mark review as completed or give it a stepId since it's the final step
-          // This keeps it active and interactive
-          setCurrentFlow(null);
-          setFlowActive(false);
-          markStepCompleted('creation'); // Mark creation as fully done
-        }, 1500);
+        
+        // Complete the flow
+        setCurrentFlow(null);
+        setFlowActive(false);
       }, 2500);
     }, 500);
   }, [addMessage, markStepCompleted, handleToolSelection, onShowAllTools, currentStep, schedule]);
 
   // Also guard the legacy helper to avoid stray inserts
   const oldHandleDeliveryMethodSelect = useCallback((method: string) => {
-    addMessage(`Selected: ${method} delivery`, 'user');
+    addSimpleMessage(`Selected: ${method} delivery`, 'user');
     markStepCompleted('delivery-method');
 
     schedule(() => {
@@ -1111,14 +1175,17 @@ export function ConversationalChat({
         addMessage(
           'Client created successfully! Your new client is ready to receive leads.',
           'assistant',
-          <Alert
-            kind="alert"
-            type="success"
-            message="Client has been created and is now active in your LeadExec system."
-            title="Setup Complete!"
-          />,
-          false,
-          'creation-complete'
+          {
+            component: (
+              <Alert
+                kind="alert"
+                type="success"
+                message="Client has been created and is now active in your LeadExec system."
+                title="Setup Complete!"
+              />
+            ),
+            stepId: 'creation-complete'
+          }
         );
         
         // Add the action button as a separate message
@@ -1126,14 +1193,16 @@ export function ConversationalChat({
           addMessage(
             '',
             'assistant',
-            <div className="flex justify-start">
-              <Button 
-                onClick={() => handleToolSelection('create-new-client')} 
-                className="font-medium"
-              >
-                Create Another Client
-              </Button>
-            </div>
+            {
+              component: <div className="flex justify-start">
+                <Button 
+                  onClick={() => handleToolSelection('create-new-client')} 
+                  className="font-medium"
+                >
+                  Create Another Client
+                </Button>
+              </div>
+            }
           );
         }, 100);
       }, 1500);
@@ -1141,11 +1210,182 @@ export function ConversationalChat({
   }, [addMessage, markStepCompleted, handleToolSelection, schedule, addProcessingMessage]);
 
   const handleBulkUpload = useCallback(() => {
+    // Set current step for proper flow management
+    setCurrentStep('bulk-upload');
+    
     addMessage(
-      'I\'ll help you upload multiple clients at once using an Excel file. The system will automatically generate usernames and passwords.',
-      'assistant'
+      'I\'ll help you upload multiple clients at once using an Excel file. The system will automatically generate usernames and passwords for each client.',
+      'assistant',
+      {
+        component: (
+          <div className="space-y-6">
+            <FileDrop
+              kind="filedrop"
+              title="Bulk Client Upload"
+              description="Upload multiple clients using Excel template"
+              accept=".xlsx,.xls,.csv"
+              multiple={false}
+              maxSizeMb={10}
+              onUploadStart={(files) => {
+                console.log('Bulk upload started:', files);
+                // Simulate upload processing
+                setTimeout(() => {
+                  handleBulkUploadComplete(files[0]);
+                }, 2000);
+              }}
+            />
+            <div className="flex gap-3">
+              <Button 
+                onClick={() => handleBulkUploadComplete(new File([''], 'sample.xlsx'))}
+                className="font-medium"
+              >
+                Continue
+              </Button>
+            </div>
+          </div>
+        ),
+        stepId: 'bulk-upload'
+      }
     );
-  }, [addMessage]);
+  }, [addMessage, setCurrentStep]);
+
+
+  const handleBulkUploadComplete = useCallback((file: File) => {
+    addSimpleMessage(`Uploaded: ${file.name}`, 'user');
+    markStepCompleted('bulk-upload');
+    setCurrentStep('processing');
+
+    // Show processing state
+    schedule(() => {
+      addMessage(
+        'Processing your bulk client upload. Please wait while I validate and create the clients...',
+        'assistant',
+        {
+          component: (
+            <Steps
+              kind="steps"
+              variant="progress"
+              title="Processing Bulk Upload"
+              steps={[
+                { id: 'validate', title: 'Validating file format' },
+                { id: 'parse', title: 'Parsing client data' },
+                { id: 'create', title: 'Creating client accounts' },
+                { id: 'generate', title: 'Generating credentials' },
+                { id: 'notify', title: 'Sending welcome emails' }
+              ]}
+              status={{
+                'validate': 'done',
+                'parse': 'current',
+                'create': 'todo',
+                'generate': 'todo',
+                'notify': 'todo'
+              }}
+              current="parse"
+            />
+          ),
+          stepId: 'processing'
+        }
+      );
+
+      // Simulate processing steps
+      let stepIndex = 1;
+      const steps = ['parse', 'create', 'generate', 'notify'];
+      const processInterval = setInterval(() => {
+        if (stepIndex < steps.length) {
+          // Update progress (in a real app, this would come from server)
+          stepIndex++;
+          if (stepIndex === steps.length) {
+            clearInterval(processInterval);
+            handleBulkUploadSuccess();
+          }
+        }
+      }, 1500);
+    }, 1000);
+  }, [addMessage, markStepCompleted, schedule]);
+
+  const handleBulkUploadSuccess = useCallback(() => {
+    markStepCompleted('processing');
+    setCurrentStep('results');
+    
+    schedule(() => {
+      addMessage(
+        'Bulk client upload completed successfully! Here\'s a summary of what was created:',
+        'assistant',
+        {
+          component: (
+            <div className="space-y-4">
+              <Alert
+                kind="alert"
+                type="success"
+                title="Upload Complete!"
+                message="All clients have been created and welcome emails sent."
+              />
+              
+              <SummaryCard
+                kind="summary"
+                title="Upload Results"
+                items={[
+                  {
+                    id: 'total',
+                    title: 'Total Clients Processed',
+                    subtitle: '25',
+                    status: 'success' as const,
+                    message: 'All clients successfully created'
+                  },
+                  {
+                    id: 'credentials',
+                    title: 'Credentials Generated',
+                    subtitle: '25',
+                    status: 'success' as const,
+                    message: 'Unique usernames and secure passwords'
+                  },
+                  {
+                    id: 'emails',
+                    title: 'Welcome Emails Sent',
+                    subtitle: '25', 
+                    status: 'success' as const,
+                    message: 'Clients notified with login details'
+                  }
+                ]}
+                actions={[
+                  { id: 'download-report', label: 'Download Report' },
+                  { id: 'view-clients', label: 'View Clients' }
+                ]}
+              />
+            </div>
+          ),
+          stepId: 'results'
+        }
+      );
+
+      // Add suggested actions
+      schedule(() => {
+        addMessage(
+          '',
+          'assistant',
+          {
+            component: (
+              <div className="flex justify-start gap-3">
+                <Button 
+                  onClick={() => handleToolSelection('create-new-client')}
+                  className="font-medium"
+                >
+                  Create Another Client
+                </Button>
+                <Button 
+                  variant="outline"
+                  onClick={() => addSimpleMessage('Show client list', 'user')}
+                  className="font-medium"
+                >
+                  View All Clients
+                </Button>
+              </div>
+            )
+          }
+        );
+      }, 1000);
+    }, 500);
+  }, [addMessage, markStepCompleted, schedule, handleToolSelection]);
 
   const handleUserInput = useCallback((input: string) => {
     const lowerInput = input.toLowerCase();
@@ -1157,24 +1397,28 @@ export function ConversationalChat({
       addMessage(
         'I can provide guidance on LeadExec features and best practices. Here are some key areas I can help with:\n\n• Client setup and configuration\n• Delivery method selection and setup\n• Lead routing and distribution\n• Performance optimization\n• Troubleshooting common issues\n\nWhat specific area would you like to explore?',
         'assistant',
-        <div className="flex gap-2 mt-4">
-          <Button 
-            variant="outline" 
-            size="sm"
-            onClick={() => handleToolSelection('create-new-client')}
-            className="font-medium"
-          >
-            Start Client Setup
-          </Button>
-          <Button 
-            variant="outline" 
-            size="sm"
-            onClick={() => onShowAllTools?.()}
-            className="font-medium"
-          >
-            Browse All Tools
-          </Button>
-        </div>
+        {
+          component: (
+            <div className="flex gap-2 mt-4">
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => handleToolSelection('create-new-client')}
+                className="font-medium"
+              >
+                Start Client Setup
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => onShowAllTools?.()}
+                className="font-medium"
+              >
+                Browse All Tools
+              </Button>
+            </div>
+          )
+        }
       );
     } else if (lowerInput.includes('client')) {
       if (lowerInput.includes('create') || lowerInput.includes('new')) {
@@ -1185,41 +1429,49 @@ export function ConversationalChat({
         addMessage(
           'I can help you with client-related tasks. Would you like to create a new client or do a bulk upload?',
           'assistant',
-          <div className="flex gap-2 mt-4">
-            <Button 
-              variant="outline" 
-              size="sm"
-              onClick={() => handleToolSelection('create-new-client')}
-              className="font-medium"
-            >
-              Create Client
-            </Button>
-            <Button 
-              variant="outline" 
-              size="sm"
-              onClick={() => handleToolSelection('bulk-client-upload')}
-              className="font-medium"
-            >
-              Bulk Upload
-            </Button>
-          </div>
+          {
+            component: (
+              <div className="flex gap-2 mt-4">
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => handleToolSelection('create-new-client')}
+                  className="font-medium"
+                >
+                  Create Client
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => handleToolSelection('bulk-client-upload')}
+                  className="font-medium"
+                >
+                  Bulk Upload
+                </Button>
+              </div>
+            )
+          }
         );
       }
     } else {
       addMessage(
         'I understand you want to work with LeadExec! I can help you with various tasks like creating clients, bulk uploads, and setting up delivery methods. What would you like to accomplish?',
         'assistant',
-        <div className="flex gap-2 mt-4">
-          <Button 
-            variant="outline" 
-            size="sm"
-            onClick={() => onShowAllTools?.()}
-            className="gap-2 font-medium"
-          >
-            <Wrench className="w-3 h-3" />
-            View All Tools
-          </Button>
-        </div>
+        {
+          component: (
+            <div className="flex gap-2 mt-4">
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => onShowAllTools?.()}
+                className="gap-2 font-medium"
+              >
+                <Wrench className="w-3 h-3" />
+                View All Tools
+              </Button>
+            </div>
+          )
+        }
       );
     }
   }, [addMessage, handleToolSelection, onShowAllTools]);
@@ -1228,7 +1480,7 @@ export function ConversationalChat({
     if (!inputValue.trim() || isProcessing) return;
     onWelcomeComplete?.();
     const userMessage = inputValue;
-    addMessage(userMessage, 'user');
+    addSimpleMessage(userMessage, 'user');
     setInputValue('');
     setIsTyping(true);
 
@@ -1309,7 +1561,7 @@ export function ConversationalChat({
                            message.component.props?.className?.includes('grid grid-cols-1'));
                         
                         // Components that don't need container wrapper (they handle their own root-level styling)
-                        const noWrapperTypes = ['process-state', 'alert'];
+                        const noWrapperTypes = ['process-state', 'alert', 'help-sources'];
                         const needsWrapper = !noWrapperTypes.includes(componentType) && !isButtonGroup && !isSourcesList;
                         
                         return (
@@ -1325,6 +1577,33 @@ export function ConversationalChat({
                         );
                       })()
                     )}
+                    
+                    {/* Suggested Actions - only for assistant messages */}
+                    {message.sender === 'assistant' && message.suggestedActions && message.suggestedActions.length > 0 && (
+                      <div className={`mt-4 ${flowActive && !message.isWelcome ? 'opacity-40 pointer-events-none' : ''}`}>
+                        <div className="flex flex-wrap gap-2">
+                          {message.suggestedActions.map((action) => (
+                            <Button
+                              key={action.id}
+                              variant={action.variant || 'outline'}
+                              size="sm"
+                              className={`h-8 text-xs gap-2 ${
+                                flowActive && !message.isWelcome 
+                                  ? 'opacity-40 pointer-events-none bg-muted/20' 
+                                  : ''
+                              }`}
+                              disabled={action.disabled || (flowActive && !message.isWelcome)}
+                              onClick={action.onClick}
+                            >
+                              {action.icon && action.icon}
+                              {action.label}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Sources are now handled as proper components within messages */}
                   </div>
 
                   {message.sender === 'user' && (

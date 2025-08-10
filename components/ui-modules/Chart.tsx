@@ -94,6 +94,8 @@ export function Chart({
   onChange,
   onAction
 }: ChartProps) {
+  // Provide default description if none is given
+  const effectiveDescription = description || (title ? "Interactive chart visualization with data analysis and export capabilities" : undefined);
   const [currentType, setCurrentType] = useState<ChartType>(type);
 
   const handleTypeChange = useCallback((newType: ChartType) => {
@@ -381,11 +383,11 @@ export function Chart({
   return (
     <div className="space-y-6">
       {/* Header */}
-      {(title || description) && (
+      {(title || effectiveDescription) && (
         <div className="space-y-1">
           {title && (
             <div className="flex items-center gap-2">
-              <h3 className="font-medium text-foreground text-lg">{title}</h3>
+              <h3 className="text-base font-medium text-foreground">{title}</h3>
               {helpUrl && (
                 <Button variant="ghost" size="sm" asChild className="h-4 w-4 p-0">
                   <a href={helpUrl} target="_blank" rel="noopener noreferrer">
@@ -395,8 +397,8 @@ export function Chart({
               )}
             </div>
           )}
-          {description && (
-            <p className="text-sm text-muted-foreground font-normal">{description}</p>
+          {effectiveDescription && (
+            <p className="text-sm text-muted-foreground font-normal">{effectiveDescription}</p>
           )}
         </div>
       )}

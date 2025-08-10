@@ -180,7 +180,7 @@ export function ChoiceList({
         onClick={() => !(choice.disabled || disabled || locked) && handleSelectionChange(choice.id)}
       >
         {/* Mobile: horizontal layout, Desktop: vertical layout */}
-        <div className="flex sm:flex-col sm:space-y-3 space-x-3 sm:space-x-0 items-start relative">
+        <div className="flex sm:flex-col sm:space-y-2 space-x-3 sm:space-x-0 items-start relative">
           {/* Selection indicator - positioned differently for horizontal vs vertical */}
           <div className="absolute right-0 top-0 sm:top-0 sm:right-0 flex-shrink-0 z-10">
             {mode === 'multiple' ? (
@@ -255,10 +255,10 @@ export function ChoiceList({
     <div className="space-y-4 sm:space-y-6">
       {/* Header */}
       {(title || description) && (
-        <div className="space-y-2">
+        <div className="space-y-1">
           {title && (
             <div className="flex items-center gap-1">
-              <h3 className="text-lg font-medium text-foreground leading-tight">{title}</h3>
+              <h3 className="text-base font-medium text-foreground leading-tight">{title}</h3>
               {helpUrl && (
                 <Button variant="ghost" size="sm" asChild className="h-4 w-4 p-0 flex-shrink-0">
                   <a href={helpUrl} target="_blank" rel="noopener noreferrer">
