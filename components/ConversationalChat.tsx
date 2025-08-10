@@ -1354,8 +1354,6 @@ export function ConversationalChat({
               onUploadStart={(files) => {
                 handleBulkFileUpload(files[0]);
               }}
-              disabled={completedSteps.has('upload') && currentStep !== 'upload'}
-              locked={completedSteps.has('upload') && currentStep !== 'upload'}
             />
           ),
           stepId: 'upload'
@@ -1379,16 +1377,10 @@ export function ConversationalChat({
         {
           component: (
             <ProcessState
-              kind="process"
+              kind="process-state"
               title="Validating Data"
-              status="processing"
-              message="Checking file format and data integrity..."
-              details={[
-                'Verifying column headers',
-                'Checking required fields',
-                'Validating email formats',
-                'Detecting duplicates'
-              ]}
+              state="processing"
+              detail="Checking file format and data integrity..."
             />
           ),
           stepId: 'validate'
@@ -1410,16 +1402,10 @@ export function ConversationalChat({
           ...msg,
           component: (
             <ProcessState
-              kind="process"
+              kind="process-state"
               title="Validation Complete"
-              status="success"
-              message="All data validated successfully!"
-              details={[
-                '✓ 25 valid client records found',
-                '✓ All required fields present',
-                '✓ Email formats valid',
-                '✓ No duplicates detected'
-              ]}
+              state="completed"
+              detail="All data validated successfully!"
             />
           )
         };
@@ -1516,7 +1502,6 @@ export function ConversationalChat({
             type="success"
             title="Upload Complete!"
             message="All clients have been created and welcome emails sent."
-            locked={completedSteps.has('results') && currentStep !== 'results'}
           />
           
           <SummaryCard
@@ -1546,11 +1531,13 @@ export function ConversationalChat({
               }
             ]}
             actions={[
-              { id: 'download-report', label: 'Download Report', onClick: () => handleDownloadReport() },
-              { id: 'view-clients', label: 'View Clients', onClick: () => handleViewClients() }
+              { id: 'download-report', label: 'Download Report' },
+              { id: 'view-clients', label: 'View Clients' }
             ]}
-            locked={completedSteps.has('results') && currentStep !== 'results'}
-            disabled={completedSteps.has('results') && currentStep !== 'results'}
+            onAction={(actionId: string) => {
+              if (actionId === 'download-report') handleDownloadReport();
+              if (actionId === 'view-clients') handleViewClients();
+            }}
           />
         </div>,
         [
@@ -1577,7 +1564,7 @@ export function ConversationalChat({
         'results' // stepId
       );
     }, 500);
-  }, [addMessage, markStepCompleted, completedSteps, currentStep, schedule, setMessages, handleToolSelection, handleUnimplementedTool, handleResetToWelcome]);
+  }, [addMessage, markStepCompleted, completedSteps, currentStep, schedule, setMessages, handleToolSelection, handleUnimplementedTool]);
 
   const handleDownloadReport = useCallback(() => {
     addSimpleMessage('Download Report', 'user');
@@ -1653,10 +1640,10 @@ export function ConversationalChat({
     resetSession();
     setFlowActive(false);
     schedule(() => {
-      // Show welcome message again
-      showWelcomeMessage();
+      // Flow is complete, user can start a new flow
+      onWelcomeComplete?.();
     }, 500);
-  }, [resetSession, schedule, showWelcomeMessage]);
+  }, [resetSession, schedule, onWelcomeComplete]);
 
   const handleUserInput = useCallback((input: string) => {
     const lowerInput = input.toLowerCase();
