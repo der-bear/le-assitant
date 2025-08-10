@@ -3,7 +3,11 @@
     "allow": [
       "Bash(npx tsc:*)",
       "mcp__ide__getDiagnostics",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(git cherry-pick:*)",
+      "Bash(rm:*)",
+      "Bash(git stash show:*)",
+      "Bash(npm run build:*)"
     ],
     "deny": []
   }
