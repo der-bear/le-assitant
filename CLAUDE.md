@@ -93,6 +93,42 @@ The project has comprehensive guidelines in the `/guidelines` directory:
 - TypeScript strict mode enabled
 - Development server typically runs on port 5173
 
+## CRITICAL DESIGN PRINCIPLES - REMEMBER THESE ALWAYS
+
+### Conversational-First Approach
+- **PRIORITIZE CONVERSATIONAL WAY** - All additional texts, explanations, and guidance must be in chat messages
+- **Only provide necessary UI in flow** - Use UI modules ONLY when you need to display or capture structured information from user
+- **Keep experience chat-focused, not form-heavy** - Don't turn chat into a series of forms
+
+### AI Message Architecture (CRITICAL)
+- **Agent messages have multiple slots**: message content, UI module (optional), suggested actions (optional), sources (optional) 
+- **SUGGESTED ACTIONS ARE NOT PART OF MODULES** - They are a separate message-level feature
+- **SOURCES ARE NOT PART OF MODULES** - They are a separate message-level feature
+- **Each slot is independent and composed at message level**
+
+### Module Design Philosophy
+- **Modules should be universal/pure** - Layout handled by parent containers, not hardcoded within modules
+- **NO hardcoded wrappers in modules** - For sources we don't use `border rounded-lg p-4 sm:p-6 bg-card shadow-sm` wrapper
+- **Show sources as responsive cards** - Same way as welcome tools, not wrapped in module containers
+- **Modules are for structured data only** - Not for decorative or conversational content
+
+### UI Module Usage Guidelines
+- **ONLY use UI modules for structured data** - When you need to display or capture structured information (forms, tables, choices, progress)
+- **Everything else stays conversational** - Explanatory text, guidance, responses stay in chat messages
+- **Keep modules minimal and focused** - They should serve a specific data purpose, not be decorative
+- **Use existing components** - Don't reinvent manual rendering when components exist
+
+### Component Usage Patterns  
+- **Always check for existing components first** - Don't recreate what already exists
+- **Follow established architecture** - Don't create new patterns when existing ones work
+- **Reduce code duplication** - Reuse shared foundations and patterns
+
+### Suggested Actions Locking (CRITICAL)
+- **LOCK suggested actions when new scenarios start** - Prevent unintentional flow interruption
+- **HIGHLIGHT selected actions** - Show which action was chosen
+- **Same locking logic as modules** - Use flowActive state and completion tracking
+- **Visual consistency** - Locked actions should match locked module appearance
+
 ## Future Improvements
 - Add comprehensive error handling
 - Implement proper loading states

@@ -1,42 +1,25 @@
 import React from 'react';
 import { Button } from '../ui/button';
-import { Alert, AlertDescription } from '../ui/alert';
-import { Loader2, CheckCircle, AlertCircle, HelpCircle } from 'lucide-react';
+import { Loader2, CheckCircle, AlertCircle } from 'lucide-react';
+import { ModuleContainer } from './shared';
+import { LockableModule, ModuleCallbacks } from './shared/types';
 
-type Action = { id: string; label: string; variant?: 'default'|'secondary'|'ghost'; disabled?: boolean };
-
-type ProcessStateModule = {
-  id?: string;
-  title?: string;
-  description?: string;
-  helpUrl?: string;
-  loading?: boolean;
-  error?: string;
-  empty?: string;
-  actions?: Action[];
+// Extend the base module with ProcessState-specific props
+export interface ProcessStateModule extends LockableModule {
   kind: 'process-state';
-  state: 'processing'|'completed'|'failed';
+  state: 'processing' | 'completed' | 'failed';
   detail?: string;
   retryActionId?: string;
-};
-
-interface ProcessStateProps extends ProcessStateModule {
-  onAction?: (actionId: string) => void;
 }
 
+export interface ProcessStateProps extends ProcessStateModule, ModuleCallbacks {}
+
 export function ProcessState({
-  id,
-  title,
-  description,
-  helpUrl,
-  loading = false,
-  error,
-  empty,
-  actions = [],
   state,
   detail,
   retryActionId,
-  onAction
+  onAction,
+  ...baseProps
 }: ProcessStateProps) {
   const getIcon = () => {
     switch (state) {
@@ -78,42 +61,7 @@ export function ProcessState({
   };
 
   return (
-    <div className="space-y-4">
-      {/* Header */}
-      {(title || description) && (
-        <div className="space-y-2">
-          {title && (
-            <div className="flex items-center gap-1">
-              <h3 className="font-medium">{title}</h3>
-              {helpUrl && (
-                <Button variant="ghost" size="sm" asChild className="h-4 w-4 p-0">
-                  <a href={helpUrl} target="_blank" rel="noopener noreferrer">
-                    <HelpCircle className="h-3 w-3" />
-                  </a>
-                </Button>
-              )}
-            </div>
-          )}
-          {description && (
-            <p className="text-sm text-muted-foreground">{description}</p>
-          )}
-        </div>
-      )}
-
-      {/* Error Alert */}
-      {error && (
-        <Alert variant="destructive">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-
-      {/* Empty State */}
-      {empty && (
-        <Alert>
-          <AlertDescription>{empty}</AlertDescription>
-        </Alert>
-      )}
-
+    <ModuleContainer {...baseProps} onAction={onAction} showStates={false}>
       <div className="flex items-center gap-3 p-4 border rounded-lg bg-card">
         {/* Status Icon */}
         <div className="flex-shrink-0">
@@ -144,22 +92,6 @@ export function ProcessState({
           </Button>
         )}
       </div>
-
-      {/* Actions */}
-      {actions.length > 0 && (
-        <div className="flex items-center gap-3">
-          {actions.map((action) => (
-            <Button
-              key={action.id}
-              variant={action.variant || 'outline'}
-              disabled={loading || action.disabled}
-              onClick={() => onAction?.(action.id)}
-            >
-              {action.label}
-            </Button>
-          ))}
-        </div>
-      )}
-    </div>
+    </ModuleContainer>
   );
 }

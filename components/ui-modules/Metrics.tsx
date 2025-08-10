@@ -53,6 +53,8 @@ export function Metrics({
   exportable = true,
   onAction
 }: MetricsProps) {
+  // Provide default description if none is given
+  const effectiveDescription = description || (title ? "Key performance indicators and metrics with trend analysis" : undefined);
   const formatValue = useCallback((value: number | string, kind?: string) => {
     if (typeof value === 'string') return value;
     
@@ -107,11 +109,11 @@ export function Metrics({
     return (
       <div className="space-y-6">
         {/* Header */}
-        {(title || description) && (
-          <div className="space-y-2">
+        {(title || effectiveDescription) && (
+          <div className="space-y-1">
             {title && (
               <div className="flex items-center gap-2">
-                <h3 className="font-medium">{title}</h3>
+                <h3 className="text-base font-medium">{title}</h3>
                 {helpUrl && (
                   <Button variant="ghost" size="sm" asChild className="h-4 w-4 p-0">
                     <a href={helpUrl} target="_blank" rel="noopener noreferrer">
@@ -121,8 +123,8 @@ export function Metrics({
                 )}
               </div>
             )}
-            {description && (
-              <p className="text-sm text-muted-foreground">{description}</p>
+            {effectiveDescription && (
+              <p className="text-sm text-muted-foreground">{effectiveDescription}</p>
             )}
           </div>
         )}
@@ -147,11 +149,11 @@ export function Metrics({
     return (
       <div className="space-y-6">
         {/* Header */}
-        {(title || description) && (
-          <div className="space-y-2">
+        {(title || effectiveDescription) && (
+          <div className="space-y-1">
             {title && (
               <div className="flex items-center gap-2">
-                <h3 className="font-medium">{title}</h3>
+                <h3 className="text-base font-medium">{title}</h3>
                 {helpUrl && (
                   <Button variant="ghost" size="sm" asChild className="h-4 w-4 p-0">
                     <a href={helpUrl} target="_blank" rel="noopener noreferrer">
@@ -161,8 +163,8 @@ export function Metrics({
                 )}
               </div>
             )}
-            {description && (
-              <p className="text-sm text-muted-foreground">{description}</p>
+            {effectiveDescription && (
+              <p className="text-sm text-muted-foreground">{effectiveDescription}</p>
             )}
           </div>
         )}
@@ -177,12 +179,12 @@ export function Metrics({
   return (
     <div className="space-y-6">
       {/* Header */}
-      {(title || description || helpUrl) && (
+      {(title || effectiveDescription || helpUrl) && (
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-1 flex-1">
             {title && (
               <div className="flex items-center gap-2">
-                <h3 className="font-medium">{title}</h3>
+                <h3 className="text-base font-medium">{title}</h3>
                 {helpUrl && (
                   <Button variant="ghost" size="sm" asChild className="h-4 w-4 p-0">
                     <a href={helpUrl} target="_blank" rel="noopener noreferrer">
@@ -192,8 +194,8 @@ export function Metrics({
                 )}
               </div>
             )}
-            {description && (
-              <p className="text-sm text-muted-foreground">{description}</p>
+            {effectiveDescription && (
+              <p className="text-sm text-muted-foreground">{effectiveDescription}</p>
             )}
           </div>
 
@@ -239,7 +241,7 @@ export function Metrics({
       <div className={getGridClasses()}>
         {metrics.map((metric) => (
           <Card key={metric.id} className="p-6">
-            <div className="space-y-2">
+            <div className="space-y-1">
               <div className="flex items-center justify-between">
                 <p className="text-sm text-muted-foreground">{metric.label}</p>
                 {metric.change !== undefined && formatChange(metric.change)}

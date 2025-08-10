@@ -650,7 +650,7 @@ export function Form({
       <React.Fragment key={section.id}>
         {/* Add separator between sections (not for the first section) */}
         {index > 0 && (section.reveal || section.title) && (
-          <Separator className="my-6" />
+          <Separator className="my-8" />
         )}
         
         <div className="space-y-4">
@@ -703,7 +703,7 @@ export function Form({
   }
 
   return (
-    <div className={`space-y-6 max-w-2xl ${
+    <div className={`space-y-6 ${
       locked 
         ? 'opacity-60 pointer-events-none' 
         : ''
@@ -713,7 +713,7 @@ export function Form({
         <div className="space-y-1">
           {title && (
             <div className="flex items-center gap-1">
-              <h3 className="text-base font-medium">{title}</h3>
+              <h3 className="text-lg font-medium">{title}</h3>
               {helpUrl && (
                 <Button variant="ghost" size="sm" asChild className="h-4 w-4 p-0">
                   <a href={helpUrl} target="_blank" rel="noopener noreferrer">

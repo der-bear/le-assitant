@@ -205,12 +205,12 @@ const componentExamples: ComponentExample[] = [
     props: {
       kind: 'filedrop',
       title: 'Bulk Client Upload',
-      description: 'Upload multiple clients using Excel template',
       accept: '.xlsx,.xls,.csv',
       multiple: false,
       maxSizeMb: 10,
-      templateUrl: '#template-download',
-      templateLabel: 'Download Template'
+      actions: [
+        { id: 'continue', label: 'Continue', variant: 'default' }
+      ]
     },
     component: FileDrop
   },

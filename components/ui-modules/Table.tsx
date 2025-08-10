@@ -95,6 +95,8 @@ export function Table({
   onChange,
   onAction
 }: TableProps) {
+  // Provide default description if none is given
+  const effectiveDescription = description || (title ? "Data table with sorting, filtering, and export capabilities" : undefined);
   const [currentSort, setCurrentSort] = useState<SortConfig | null>(sort || null);
   const [filter, setFilter] = useState('');
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
@@ -263,11 +265,11 @@ export function Table({
   return (
     <div className="space-y-6">
       {/* Header */}
-      {(title || description) && (
+      {(title || effectiveDescription) && (
         <div className="space-y-1">
           {title && (
             <div className="flex items-center gap-2">
-              <h3 className="font-medium">{title}</h3>
+              <h3 className="text-base font-medium">{title}</h3>
               {helpUrl && (
                 <Button variant="ghost" size="sm" asChild className="h-4 w-4 p-0">
                   <a href={helpUrl} target="_blank" rel="noopener noreferrer">
@@ -277,8 +279,8 @@ export function Table({
               )}
             </div>
           )}
-          {description && (
-            <p className="text-sm text-muted-foreground">{description}</p>
+          {effectiveDescription && (
+            <p className="text-sm text-muted-foreground">{effectiveDescription}</p>
           )}
         </div>
       )}

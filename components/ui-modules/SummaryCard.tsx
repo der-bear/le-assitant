@@ -54,6 +54,8 @@ export function SummaryCard({
   onAction,
   onItemClick
 }: SummaryCardProps) {
+  // Provide default description if none is given
+  const effectiveDescription = description || (title ? "Summary of results with status indicators and links" : undefined);
   const getStatusIcon = useCallback((status: SummaryItem['status']) => {
     switch (status) {
       case 'success':
@@ -109,11 +111,11 @@ export function SummaryCard({
     return (
       <div className="space-y-6">
         {/* Header */}
-        {(title || description) && (
-          <div className="space-y-2">
+        {(title || effectiveDescription) && (
+          <div className="space-y-1">
             {title && (
               <div className="flex items-center gap-1">
-                <h3 className="font-medium">{title}</h3>
+                <h3 className="text-base font-medium">{title}</h3>
                 {helpUrl && (
                   <Button variant="ghost" size="sm" asChild className="h-4 w-4 p-0">
                     <a href={helpUrl} target="_blank" rel="noopener noreferrer">
@@ -123,8 +125,8 @@ export function SummaryCard({
                 )}
               </div>
             )}
-            {description && (
-              <p className="text-sm text-muted-foreground">{description}</p>
+            {effectiveDescription && (
+              <p className="text-sm text-muted-foreground">{effectiveDescription}</p>
             )}
           </div>
         )}
@@ -151,11 +153,11 @@ export function SummaryCard({
     return (
       <div className="space-y-6">
         {/* Header */}
-        {(title || description) && (
-          <div className="space-y-2">
+        {(title || effectiveDescription) && (
+          <div className="space-y-1">
             {title && (
               <div className="flex items-center gap-1">
-                <h3 className="font-medium">{title}</h3>
+                <h3 className="text-base font-medium">{title}</h3>
                 {helpUrl && (
                   <Button variant="ghost" size="sm" asChild className="h-4 w-4 p-0">
                     <a href={helpUrl} target="_blank" rel="noopener noreferrer">
@@ -165,8 +167,8 @@ export function SummaryCard({
                 )}
               </div>
             )}
-            {description && (
-              <p className="text-sm text-muted-foreground">{description}</p>
+            {effectiveDescription && (
+              <p className="text-sm text-muted-foreground">{effectiveDescription}</p>
             )}
           </div>
         )}
@@ -182,10 +184,10 @@ export function SummaryCard({
     <div className="space-y-6">
       {/* Header */}
       {(title || description) && (
-        <div className="space-y-2">
+        <div className="space-y-1">
           {title && (
             <div className="flex items-center gap-2">
-              <h3 className="font-medium">{title}</h3>
+              <h3 className="text-base font-medium">{title}</h3>
               {helpUrl && (
                 <Button variant="ghost" size="sm" asChild className="h-4 w-4 p-0">
                   <a href={helpUrl} target="_blank" rel="noopener noreferrer">
@@ -218,8 +220,8 @@ export function SummaryCard({
             <div className="flex items-center justify-between gap-4">
               {/* Left side: Content */}
               <div className="flex-1 min-w-0">
-                <h4 className="font-medium text-foreground mb-1">{item.title}</h4>
-                <div className="flex items-center gap-2 text-sm">
+                <h4 className="text-sm font-medium text-foreground mb-0.5">{item.title}</h4>
+                <div className="flex items-center gap-2 text-xs">
                   {item.subtitle && <span className="text-muted-foreground">{item.subtitle}</span>}
                   {item.message && item.subtitle && <span className="text-muted-foreground">•</span>}
                   {item.message && (
