@@ -14,59 +14,36 @@ import { HelpSources } from './ui-modules/HelpSources';
 import { 
   Send, 
   User, 
-  Building, 
-  Upload, 
-  Wrench,
   ArrowRight,
   Bot,
   ExternalLink,
   Download
 } from 'lucide-react';
 
-interface SuggestedAction {
-  id: string;
-  label: string;
-  variant?: 'default' | 'outline' | 'secondary' | 'ghost';
-  icon?: React.ReactNode;
-  disabled?: boolean;
-  selected?: boolean;
-  onClick: () => void;
-}
-
-interface MessageSource {
-  id: string;
-  title: string;
-  url: string;
-  type: 'documentation' | 'api' | 'guide' | 'reference';
-}
-
-interface Message {
-  id: string;
-  content: string;
-  sender: 'user' | 'assistant';
-  timestamp: Date;
-  
-  // AI Agent Message Slots
-  component?: React.ReactNode;           // UI Module slot
-  suggestedActions?: SuggestedAction[];  // Actions slot
-  sources?: MessageSource[];             // Sources slot
-  
-  // Message properties
-  isWelcome?: boolean;
-  isLocked?: boolean;
-  stepId?: string;
-  priority?: 'low' | 'normal' | 'high';
-  category?: string;
-}
-
-interface ConversationalChatProps {
-  selectedTool?: string | null;
-  onToolProcessed?: () => void;
-  onShowAllTools?: () => void;
-  onStartOver?: () => void;
-  onWelcomeComplete?: () => void;
-  resetTrigger?: number;
-}
+// Import types, constants, and utilities
+import type { 
+  Message, 
+  ConversationalChatProps, 
+  SuggestedAction,
+  MessageSource,
+  AddMessageOptions,
+  FormField,
+  FormSection,
+  ValidationRule,
+  DerivationRule
+} from './chat-types';
+import { 
+  QUICK_TILES, 
+  CLIENT_SETUP_STEPS, 
+  BULK_UPLOAD_STEPS,
+  DELIVERY_OPTIONS,
+  TOOL_CATEGORIES,
+  HELP_SOURCES_BY_CATEGORY,
+  TOOL_NAMES,
+  DELIVERY_METHOD_LABELS
+} from './chat-constants';
+import { createMessage, generateMessageId as generateId } from './chat-utils';
+import { useFormDerivation } from './hooks/useFormDerivation';
 
 export function ConversationalChat({ 
   selectedTool, 
@@ -83,7 +60,6 @@ export function ConversationalChat({
   const [completedSteps, setCompletedSteps] = useState<Set<string>>(new Set());
   const [showWelcome, setShowWelcome] = useState(true);
   const [flowActive, setFlowActive] = useState(false);
-  const [derivedValues, setDerivedValues] = useState<Record<string, any>>({});
   const [currentStep, setCurrentStep] = useState<string | null>(null);
   const [selectedActions, setSelectedActions] = useState<Set<string>>(new Set());
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -119,30 +95,11 @@ export function ConversationalChat({
     };
   }, []);
 
-  // Quick tiles for welcome - 3 tools in one row
-  const quickTiles = [
-    {
-      id: 'create-new-client',
-      title: 'Create New Client',
-      description: 'Set up a new client with guided configuration including delivery methods and credentials',
-      icon: <Building className="w-4 h-4" />
-    },
-    {
-      id: 'bulk-client-upload',
-      title: 'Bulk Client Upload',
-      description: 'Upload multiple clients at once using an Excel file with automatic credential generation',
-      icon: <Upload className="w-4 h-4" />
-    },
-    {
-      id: 'all-tools',
-      title: 'All Tools',
-      description: 'Access all 25+ tools organized by category',
-      icon: <Wrench className="w-4 h-4" />
-    }
-  ];
+  // Use form derivation hook
+  const { derivedValues, handleDeriveRequest: handleDerive, clearDerivedValues } = useFormDerivation();
 
   const generateMessageId = useCallback(() => {
-    const id = `msg_${Date.now()}_${messageCounter}`;
+    const id = generateId(messageCounter);
     setMessageCounter(prev => prev + 1);
     return id;
   }, [messageCounter]);
@@ -151,30 +108,9 @@ export function ConversationalChat({
   const addMessage = useCallback((
     content: string,
     sender: 'user' | 'assistant',
-    options: {
-      component?: React.ReactNode;
-      suggestedActions?: SuggestedAction[];
-      sources?: MessageSource[];
-      isWelcome?: boolean;
-      stepId?: string;
-      priority?: 'low' | 'normal' | 'high';
-      category?: string;
-    } = {}
+    options: AddMessageOptions = {}
   ) => {
-    const message: Message = {
-      id: generateMessageId(),
-      content,
-      sender,
-      timestamp: new Date(),
-      component: options.component,
-      suggestedActions: options.suggestedActions,
-      sources: options.sources,
-      isWelcome: options.isWelcome || false,
-      isLocked: false,
-      stepId: options.stepId,
-      priority: options.priority || 'normal',
-      category: options.category
-    };
+    const message = createMessage(generateMessageId(), content, sender, options);
     setMessages(prev => [...prev, message]);
   }, [generateMessageId]);
 
@@ -240,7 +176,7 @@ export function ConversationalChat({
     setCurrentFlow(null);
     setCompletedSteps(new Set());
     setFlowActive(false);
-    setDerivedValues({});
+    clearDerivedValues();
     setCurrentStep(null);
     setSelectedActions(new Set());
     // Update messages to unlock all locked components
@@ -275,7 +211,7 @@ export function ConversationalChat({
     <div className="space-y-6">
       {/* Quick Tiles Grid - responsive layout with horizontal icons on mobile */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3 md:gap-4">
-        {quickTiles.map(tile => (
+        {QUICK_TILES.map(tile => (
           <Card
             key={tile.id}
             className={`p-4 cursor-pointer transition-all duration-200 border-border ${
@@ -292,7 +228,7 @@ export function ConversationalChat({
                   ? 'w-8 h-8' 
                   : 'w-8 h-8 md:w-10 md:h-10 group-hover:bg-accent-foreground/10'
               }`}>
-                {tile.icon}
+                <tile.icon className="w-4 h-4" />
               </div>
               <div className="space-y-1 text-left flex-1 min-w-0">
                 <h3 className="font-medium text-sm text-foreground leading-tight">{tile.title}</h3>
@@ -334,87 +270,10 @@ export function ConversationalChat({
   }, [messages, scrollToBottom]);
 
   const handleUnimplementedTool = useCallback((toolId: string) => {
-    // Tool category mapping
-    const toolCategories: Record<string, { category: string; alternativeTools: Array<{id: string, name: string, description: string}> }> = {
-      // Client tools
-      'client-management': { 
-        category: 'Clients',
-        alternativeTools: [
-          { id: 'create-new-client', name: 'LeadExec Client Setup', description: 'Create new client configurations with guided setup' },
-          { id: 'bulk-client-upload', name: 'Bulk Client Upload', description: 'Upload multiple clients at once via Excel' },
-          { id: 'delivery-configuration', name: 'Delivery Configuration', description: 'Configure email, webhook, and FTP delivery' }
-        ]
-      },
-      'client-search-filter': {
-        category: 'Clients', 
-        alternativeTools: [
-          { id: 'client-management', name: 'Client Management', description: 'View, edit, and manage existing clients' },
-          { id: 'create-new-client', name: 'LeadExec Client Setup', description: 'Create new client configurations with guided setup' }
-        ]
-      },
-      'delivery-configuration': {
-        category: 'Clients',
-        alternativeTools: [
-          { id: 'create-new-client', name: 'LeadExec Client Setup', description: 'Create new client configurations with guided setup' },
-          { id: 'client-management', name: 'Client Management', description: 'View, edit, and manage existing clients' }
-        ]
-      },
-      // Lead tools
-      'lead-sources': {
-        category: 'Leads',
-        alternativeTools: [
-          { id: 'lead-distribution', name: 'Lead Distribution', description: 'Configure lead routing and distribution' },
-          { id: 'lead-tracking', name: 'Lead Tracking', description: 'Track lead delivery and conversion' }
-        ]
-      },
-      // Financial tools
-      'revenue-reports': {
-        category: 'Financial',
-        alternativeTools: [
-          { id: 'billing-management', name: 'Billing Management', description: 'Manage billing and invoicing' },
-          { id: 'payment-tracking', name: 'Payment Tracking', description: 'Track client payments and invoices' }
-        ]
-      },
-      // System tools
-      'user-management': {
-        category: 'System',
-        alternativeTools: [
-          { id: 'system-settings', name: 'System Settings', description: 'Global system configuration' },
-          { id: 'integrations', name: 'Integrations', description: 'Configure third-party integrations' }
-        ]
-      }
-    };
-
-    const toolInfo = toolCategories[toolId] || { category: 'General', alternativeTools: [] };
+    const toolInfo = TOOL_CATEGORIES[toolId] || { category: 'General', alternativeTools: [] };
     const toolDisplayName = toolId.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
 
-    // Create help sources based on tool category
-    const helpSources: Record<string, Array<{id: string, title: string, description: string, url: string, kind: 'howto' | 'article' | 'api', source: 'KnowledgeBase' | 'API Docs'}>> = {
-      'Clients': [
-        { id: '1', title: 'Client Setup Guide', description: 'Complete walkthrough for setting up new clients in LeadExec', url: '#client-setup', kind: 'howto' as const, source: 'KnowledgeBase' as const },
-        { id: '2', title: 'Delivery Methods Explained', description: 'Understanding email, webhook, and FTP delivery options', url: '#delivery-methods', kind: 'article' as const, source: 'KnowledgeBase' as const },
-        { id: '3', title: 'Client API Reference', description: 'API endpoints for programmatic client management', url: '#client-api', kind: 'api' as const, source: 'API Docs' as const }
-      ],
-      'Leads': [
-        { id: '1', title: 'Lead Source Configuration', description: 'How to set up and configure lead sources', url: '#lead-sources', kind: 'howto' as const, source: 'KnowledgeBase' as const },
-        { id: '2', title: 'Lead Distribution Rules', description: 'Creating routing rules for optimal lead distribution', url: '#lead-distribution', kind: 'article' as const, source: 'KnowledgeBase' as const },
-        { id: '3', title: 'Lead Tracking Guide', description: 'Monitor lead performance and conversion rates', url: '#lead-tracking', kind: 'howto' as const, source: 'KnowledgeBase' as const }
-      ],
-      'Financial': [
-        { id: '1', title: 'Revenue Reporting Guide', description: 'Generate and analyze revenue reports', url: '#revenue-reports', kind: 'howto' as const, source: 'KnowledgeBase' as const },
-        { id: '2', title: 'Billing Management', description: 'Handle client invoicing and payment tracking', url: '#billing', kind: 'article' as const, source: 'KnowledgeBase' as const },
-        { id: '3', title: 'Financial API', description: 'Integrate with financial systems via API', url: '#financial-api', kind: 'api' as const, source: 'API Docs' as const }
-      ],
-      'System': [
-        { id: '1', title: 'User Management Guide', description: 'Add users and configure permissions', url: '#user-management', kind: 'howto' as const, source: 'KnowledgeBase' as const },
-        { id: '2', title: 'Integration Setup', description: 'Connect third-party services and APIs', url: '#integrations', kind: 'article' as const, source: 'KnowledgeBase' as const },
-        { id: '3', title: 'System Configuration', description: 'Global settings and system preferences', url: '#system-config', kind: 'howto' as const, source: 'KnowledgeBase' as const }
-      ],
-      'General': [
-        { id: '1', title: 'Getting Started with LeadExec', description: 'Overview of key features and workflows', url: '#getting-started', kind: 'article' as const, source: 'KnowledgeBase' as const },
-        { id: '2', title: 'API Documentation', description: 'Complete API reference for developers', url: '#api-docs', kind: 'api' as const, source: 'API Docs' as const }
-      ]
-    };
+    // Get help sources based on tool category
 
     // Main response message with suggested actions below
     const suggestionButtons = toolInfo.alternativeTools.length > 0 ? (
@@ -448,7 +307,7 @@ export function ConversationalChat({
           component: (
             <HelpSources
               kind="help-sources"
-              results={helpSources[toolInfo.category] || helpSources['General']}
+              results={HELP_SOURCES_BY_CATEGORY[toolInfo.category] || HELP_SOURCES_BY_CATEGORY['General']}
             />
           )
         }
@@ -477,12 +336,7 @@ export function ConversationalChat({
     setFlowActive(true);
     onWelcomeComplete?.();
 
-    const toolNames: Record<string, string> = {
-      'create-new-client': 'Create New Client',
-      'bulk-client-upload': 'Bulk Client Upload'
-    };
-
-    const toolName = toolNames[toolId] || toolId;
+    const toolName = TOOL_NAMES[toolId] || toolId;
     addSimpleMessage(`${toolName}`, 'user');
 
     setCurrentFlow(toolId);
@@ -512,11 +366,7 @@ export function ConversationalChat({
       resetSession();
       setFlowActive(true);
       onWelcomeComplete?.();
-      const toolNames: Record<string, string> = {
-        'create-new-client': 'Create New Client',
-        'bulk-client-upload': 'Bulk Client Upload'
-      };
-      const toolName = toolNames[selectedTool] || selectedTool;
+      const toolName = TOOL_NAMES[selectedTool] || selectedTool;
       addSimpleMessage(`${toolName}`, 'user');
       
       schedule(() => {
@@ -559,13 +409,6 @@ export function ConversationalChat({
   }, [flowActive]);
 
   const handleClientSetup = useCallback(() => {
-    const steps = [
-      { id: 'basic-info', title: 'Basic Information', hint: 'Company details and contact info' },
-      { id: 'delivery-method', title: 'Delivery Method', hint: 'Choose how leads will be sent' },  
-      { id: 'configuration', title: 'Configuration', hint: 'Set up preferences and settings' },
-      { id: 'creation', title: 'Creation', hint: 'Create the client in LeadExec' },
-      { id: 'review', title: 'Review', hint: 'Confirm setup and next steps' }
-    ];
 
     addMessage(
       'I\'ll guide you through the LeadExec client setup process. Here\'s what we\'ll accomplish together:',
@@ -576,7 +419,7 @@ export function ConversationalChat({
             <Steps
               kind="steps"
               variant="overview"
-              steps={steps}
+              steps={CLIENT_SETUP_STEPS}
               title="Client Setup Process"
               showIndex={true}
               locked={false}
@@ -605,9 +448,9 @@ export function ConversationalChat({
     
     schedule(() => {
       // Reset derived values for new form
-      setDerivedValues({});
+      clearDerivedValues();
       
-      const formFields = [
+      const formFields: FormField[] = [
         { 
           id: 'companyName', 
           label: 'Company Name', 
@@ -624,7 +467,7 @@ export function ConversationalChat({
         }
       ];
 
-      const credentialsSection = {
+      const credentialsSection: FormSection = {
         id: 'credentials',
         title: 'Client Credentials',
         description: 'Username and password will be auto-generated when you enter a valid email',
@@ -650,7 +493,7 @@ export function ConversationalChat({
       };
 
       // Working validation rules with correct email regex
-      const validationRules = [
+      const validationRules: ValidationRule[] = [
         {
           fieldId: 'companyName',
           rule: 'required' as const,
@@ -699,7 +542,7 @@ export function ConversationalChat({
           ]}
           submitLabel="Continue"
           onSubmit={handleBasicInfoSubmit}
-          onRequestDerive={handleDeriveRequest}
+          onRequestDerive={handleDerive}
           derivedValues={derivedValues}
           loading={false}
           disabled={completedSteps.has('basic-info') && currentStep !== 'basic-info'}
@@ -712,102 +555,35 @@ export function ConversationalChat({
     }, 500);
   }, [addMessage, completedSteps, currentStep, derivedValues, schedule]);
 
-  const handleDeriveRequest = useCallback((targets: any[], currentValues: Record<string, any>) => {
-    console.log('🔄 Derivation triggered for:', targets, 'with values:', currentValues);
-    const updates: Record<string, any> = {};
-    
-    targets.forEach(target => {
-      if (target.strategy === 'usernameFromEmail') {
-        // Generate username from email
-        const emailValue = currentValues.email;
-        if (emailValue && typeof emailValue === 'string') {
-          // Extract username part before @ symbol and clean it up
-          const username = emailValue.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
-          updates[target.fieldId] = username || 'client_' + Math.random().toString(36).substr(2, 6);
-          console.log('✅ Generated username:', updates[target.fieldId]);
-        } else {
-          updates[target.fieldId] = 'client_' + Math.random().toString(36).substr(2, 6);
-        }
-      } else if (target.strategy === 'strongPassword') {
-        // Generate a secure password
-        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%';
-        let result = '';
-        // Include at least one of each type
-        result += 'ABCDEFGHJKLMNPQRSTUVWXYZ'[Math.floor(Math.random() * 24)]; // uppercase
-        result += 'abcdefghijkmnpqrstuvwxyz'[Math.floor(Math.random() * 26)]; // lowercase  
-        result += '23456789'[Math.floor(Math.random() * 8)]; // number
-        result += '!@#$%'[Math.floor(Math.random() * 5)]; // special
-        
-        // Fill the rest randomly
-        for (let i = 4; i < 12; i++) {
-          result += chars.charAt(Math.floor(Math.random() * chars.length));
-        }
-        
-        // Shuffle the password
-        updates[target.fieldId] = result.split('').sort(() => Math.random() - 0.5).join('');
-        console.log('✅ Generated password:', updates[target.fieldId]);
-      }
-    });
-    
-    // Set the derived values which will be passed to the form
-    if (Object.keys(updates).length > 0) {
-      console.log('🚀 Setting derived values:', updates);
-      setDerivedValues(updates);
-      
-      // CRITICAL: Update the message with the form that has the new derived values
+  // Update messages when derived values change
+  useEffect(() => {
+    if (Object.keys(derivedValues).length > 0) {
       setMessages(prev => prev.map(msg => {
         if (msg.stepId === 'basic-info' && msg.component) {
-          console.log('🔄 Updating form message with derived values:', updates);
+          console.log('🔄 Updating form message with derived values:', derivedValues);
           return {
             ...msg,
             component: React.cloneElement(msg.component as React.ReactElement, {
-              derivedValues: updates
+              derivedValues
             })
           };
         }
         return msg;
       }));
     }
-  }, []);
+  }, [derivedValues]);
 
   const handleBasicInfoSubmit = useCallback((data: Record<string, any>) => {
     addSimpleMessage(`Company: ${data.companyName}, Email: ${data.email}`, 'user');
     
     // Clear derived values after submit
-    setDerivedValues({});
+    clearDerivedValues();
     
     // Mark basic info step as completed
     markStepCompleted('basic-info');
     setCurrentStep('delivery-method');
     
     schedule(() => {
-      const deliveryOptions = [
-        {
-          id: 'email',
-          label: 'Email Delivery',
-          description: 'Send leads directly to client email - simple and reliable',
-          icon: 'Mail',
-          badge: 'Popular'
-        },
-        {
-          id: 'webhook',
-          label: 'HTTP Webhook',
-          description: 'Real-time API delivery to client systems',
-          icon: 'Webhook'
-        },
-        {
-          id: 'ftp',
-          label: 'FTP Delivery',
-          description: 'File transfer protocol for batch delivery',
-          icon: 'Database'
-        },
-        {
-          id: 'skip',
-          label: 'Skip for Now',
-          description: 'Set up delivery method later',
-          icon: 'Clock'
-        }
-      ];
 
       addMessage(
         `Perfect! I've got the client information for ${data.companyName}. Now let's choose how leads will be delivered:`,
@@ -818,7 +594,7 @@ export function ConversationalChat({
               kind="choices"
               title="Choose Delivery Method"
               description="Select how leads will be sent to your client"
-              options={deliveryOptions}
+              options={DELIVERY_OPTIONS}
               mode="single"
               layout="card"
               onChange={(value) => handleDeliveryMethodSelect(value as string)}
@@ -833,14 +609,7 @@ export function ConversationalChat({
   }, [addMessage, markStepCompleted, completedSteps, currentStep, schedule]);
 
   const handleDeliveryMethodSelect = useCallback((method: string) => {
-    const methodLabels: Record<string, string> = {
-      'email': 'Email Delivery',
-      'webhook': 'HTTP Webhook',
-      'ftp': 'FTP Delivery', 
-      'skip': 'Skip for Now'
-    };
-    
-    addSimpleMessage(`Selected: ${methodLabels[method] || method}`, 'user');
+    addSimpleMessage(`Selected: ${DELIVERY_METHOD_LABELS[method] || method}`, 'user');
     
     // Mark delivery method step as completed
     markStepCompleted('delivery-method');
@@ -1239,14 +1008,6 @@ export function ConversationalChat({
   }, [addMessage, markStepCompleted, handleToolSelection, schedule, addProcessingMessage]);
 
   const handleBulkUpload = useCallback(() => {
-    const steps = [
-      { id: 'overview', title: 'Process Overview', hint: 'Understanding the bulk upload process' },
-      { id: 'template', title: 'Download Template', hint: 'Get the Excel template file' },
-      { id: 'upload', title: 'Upload File', hint: 'Upload your completed client data' },
-      { id: 'validation', title: 'Validation', hint: 'System validates your data' },
-      { id: 'processing', title: 'Processing', hint: 'Creating clients and generating credentials' },
-      { id: 'completion', title: 'Completion', hint: 'Review results and next steps' }
-    ];
 
     addMessage(
       'I\'ll help you upload multiple clients at once using an Excel file. The system will parse your data, validate it, and automatically generate secure credentials for each client.',
@@ -1257,7 +1018,7 @@ export function ConversationalChat({
             <Steps
               kind="steps"
               variant="overview"
-              steps={steps}
+              steps={BULK_UPLOAD_STEPS}
               title="Bulk Client Upload Process"
               showIndex={true}
               locked={false}
