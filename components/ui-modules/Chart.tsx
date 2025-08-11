@@ -425,7 +425,7 @@ export function Chart({
                   <p className="text-sm text-muted-foreground font-normal">{metric.label}</p>
                   {metric.change !== undefined && formatChange(metric.change)}
                 </div>
-                <div className="text-2xl font-medium text-foreground">
+                <div className="text-xl font-medium text-foreground">
                   {formatValue(metric.value, metric.kind)}
                 </div>
               </div>

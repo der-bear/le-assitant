@@ -246,7 +246,7 @@ export function Metrics({
                 <p className="text-sm text-muted-foreground">{metric.label}</p>
                 {metric.change !== undefined && formatChange(metric.change)}
               </div>
-              <div className="text-2xl font-medium">
+              <div className="text-xl font-medium">
                 {formatValue(metric.value, metric.kind)}
               </div>
             </div>

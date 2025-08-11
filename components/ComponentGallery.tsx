@@ -118,6 +118,46 @@ const componentExamples: ComponentExample[] = [
     component: ChoiceList
   },
   {
+    id: 'choicelist-simple',
+    title: 'ChoiceList - Simple Layout',
+    description: 'Minimal radio/checkbox layout without cards or icons',
+    module: 'ChoiceList',
+    props: {
+      kind: 'choices',
+      title: 'Configure Delivery Settings',
+      description: 'Choose whether to configure now or later',
+      options: [
+        { id: 'yes', label: 'Yes - Complete full setup', description: 'Configure delivery methods and lead settings now', badge: 'Recommended' },
+        { id: 'no', label: 'No - Save client and configure later', description: 'Create the client and set up delivery later' },
+        { id: 'skip', label: 'Skip this step', description: 'Continue without delivery configuration' }
+      ],
+      mode: 'single',
+      layout: 'simple'
+    },
+    component: ChoiceList
+  },
+  {
+    id: 'choicelist-multiple-simple',
+    title: 'ChoiceList - Multiple Simple',
+    description: 'Simple checkbox layout for multiple selections',
+    module: 'ChoiceList',
+    props: {
+      kind: 'choices',
+      title: 'Portal Visibility Settings',
+      description: 'Select what the client can see in their portal',
+      options: [
+        { id: 'source', label: 'Show lead source', badge: 'Popular' },
+        { id: 'campaign', label: 'Show campaign details' },
+        { id: 'grade', label: 'Show lead grade' },
+        { id: 'reassign', label: 'Allow lead reassignment' }
+      ],
+      mode: 'multiple',
+      layout: 'simple',
+      max: 3
+    },
+    component: ChoiceList
+  },
+  {
     id: 'table-clients',
     title: 'Table - Client Directory',
     description: 'Sortable table with filtering and row actions',
@@ -337,11 +377,7 @@ const componentExamples: ComponentExample[] = [
         { id: '3', title: 'Bad Data Co', subtitle: 'invalid-email', status: 'error', message: 'Invalid email format' },
         { id: '4', title: 'Global Solutions', subtitle: 'info@globalsol.com', status: 'warning', message: 'Duplicate found, skipped' }
       ],
-      compact: false,
-      actions: [
-        { id: 'retry', label: 'Retry Failed', variant: 'secondary' },
-        { id: 'export', label: 'Export Report' }
-      ]
+      compact: false
     },
     component: SummaryCard
   },
@@ -433,7 +469,7 @@ export function ComponentGallery() {
         <div className="max-w-6xl mx-auto py-8 px-6">
           {/* Header */}
           <div className="mb-8 space-y-3">
-            <h1 className="text-2xl font-medium text-foreground">Component Gallery</h1>
+            <h1 className="text-xl font-medium text-foreground">Component Gallery</h1>
             <p className="text-base text-muted-foreground leading-relaxed max-w-3xl">
               Browse all 12 universal UI modules with live examples and JSON payloads. 
               These components can be embedded in chat conversations to collect input or display structured data.
@@ -503,7 +539,7 @@ export function ComponentGallery() {
                     if (needsWrapper) {
                       return (
                         <Card className="border border-border rounded-lg bg-card overflow-hidden">
-                          <div className="p-8 bg-background">
+                          <div className="p-6 bg-background">
                             {renderExample(example)}
                           </div>
                         </Card>

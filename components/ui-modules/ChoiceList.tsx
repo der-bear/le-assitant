@@ -33,7 +33,7 @@ type ChoiceListModule = {
   kind: 'choices';
   options: Choice[];
   mode?: 'single'|'multiple';
-  layout?: 'list'|'card'|'grid';
+  layout?: 'list'|'card'|'grid'|'simple';
   value?: string | string[];
   min?: number; 
   max?: number;
@@ -121,6 +121,55 @@ export function ChoiceList({
     const selected = isSelected(choice.id);
     const icon = getIcon(choice.icon);
 
+    if (effectiveLayout === 'simple') {
+      return (
+        <div
+          key={choice.id}
+          className={`flex items-center space-x-3 p-2 rounded cursor-pointer transition-colors ${
+            selected 
+              ? 'bg-primary/5' 
+              : 'hover:bg-accent/50'
+          } ${choice.disabled || disabled || locked ? 'opacity-50 cursor-not-allowed' : ''}`}
+          onClick={() => !(choice.disabled || disabled || locked) && handleSelectionChange(choice.id)}
+        >
+          {mode === 'single' ? (
+            <RadioGroup value={selected ? choice.id : ''} className="m-0 flex-shrink-0">
+              <RadioGroupItem value={choice.id} disabled={choice.disabled || disabled || locked} />
+            </RadioGroup>
+          ) : (
+            <Checkbox 
+              checked={selected} 
+              disabled={choice.disabled || disabled || locked}
+              onCheckedChange={() => !(choice.disabled || disabled || locked) && handleSelectionChange(choice.id)}
+              className="flex-shrink-0"
+            />
+          )}
+          
+          <div className="flex-1 min-w-0">
+            <Label 
+              htmlFor={choice.id}
+              className={`text-sm font-normal cursor-pointer block ${
+                choice.disabled || disabled || locked ? 'cursor-not-allowed' : ''
+              }`}
+            >
+              {choice.label}
+            </Label>
+            {choice.description && (
+              <p className="text-xs text-muted-foreground font-normal leading-relaxed mt-1">
+                {choice.description}
+              </p>
+            )}
+          </div>
+          
+          {choice.badge && (
+            <Badge variant="secondary" className="text-xs px-2 py-0.5 font-normal">
+              {choice.badge}
+            </Badge>
+          )}
+        </div>
+      );
+    }
+
     if (effectiveLayout === 'list') {
       return (
         <div
@@ -180,9 +229,9 @@ export function ChoiceList({
         onClick={() => !(choice.disabled || disabled || locked) && handleSelectionChange(choice.id)}
       >
         {/* Mobile: horizontal layout, Desktop: vertical layout */}
-        <div className="flex sm:flex-col sm:space-y-2 space-x-3 sm:space-x-0 items-start relative">
-          {/* Selection indicator - positioned differently for horizontal vs vertical */}
-          <div className="absolute right-0 top-0 sm:top-0 sm:right-0 flex-shrink-0 z-10">
+        <div className="flex sm:flex-col items-start relative">
+          {/* Selection indicator - positioned at top-right */}
+          <div className="absolute right-0 top-0 flex-shrink-0 z-10">
             {mode === 'multiple' ? (
               <div className={`w-4 h-4 rounded border-2 flex items-center justify-center ${
                 selected ? 'bg-primary border-primary' : 'border-border'
@@ -214,8 +263,10 @@ export function ChoiceList({
           )}
 
           {/* Content */}
-          <div className="space-y-1 text-left flex-1 min-w-0 pr-6 sm:pr-0">
-            <div className="flex items-start gap-2 flex-wrap">
+          <div className={`space-y-1 text-left flex-1 min-w-0 pr-5 sm:pr-0 ${
+            icon ? 'ml-3 sm:ml-0 sm:mt-2' : ''
+          }`}>
+            <div className="flex items-center gap-2 flex-wrap">
               <h3 className="font-medium text-sm text-foreground leading-tight flex-1 min-w-0">{choice.label}</h3>
               {choice.badge && (
                 <Badge variant="secondary" className="text-xs px-2 py-0.5 font-normal flex-shrink-0">
@@ -244,6 +295,8 @@ export function ChoiceList({
           ? 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3 md:gap-4' 
           : effectiveLayout === 'card'
           ? 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 sm:gap-3 md:gap-4'
+          : effectiveLayout === 'simple'
+          ? 'space-y-1'
           : 'space-y-2'
       }`}>
         {choices.map(renderChoice)}
