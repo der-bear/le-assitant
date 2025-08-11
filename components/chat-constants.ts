@@ -41,12 +41,13 @@ export const BULK_UPLOAD_STEPS = [
   { id: 'completion', title: 'Completion', hint: 'Review results and next steps' }
 ] as const;
 
+
 // Delivery method options
 export const DELIVERY_OPTIONS = [
   {
     id: 'email',
     label: 'Email Delivery',
-    description: 'Send leads directly to client email - simple and reliable',
+    description: 'Send leads directly to client email',
     icon: 'Mail',
     badge: 'Popular'
   },
@@ -65,7 +66,7 @@ export const DELIVERY_OPTIONS = [
   {
     id: 'skip',
     label: 'Skip for Now',
-    description: 'Set up delivery method later',
+    description: 'Configure delivery method later',
     icon: 'Clock'
   }
 ] as const;

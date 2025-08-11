@@ -17,7 +17,9 @@ import {
   ArrowRight,
   Bot,
   ExternalLink,
-  Download
+  Download,
+  Plus,
+  Home
 } from 'lucide-react';
 
 // Import types, constants, and utilities
@@ -209,8 +211,8 @@ export function ConversationalChat({
   // Enhanced Welcome Cards Component - responsive horizontal layout on mobile
   const WelcomeCards = useCallback(() => (
     <div className="space-y-6">
-      {/* Quick Tiles Grid - responsive layout with horizontal icons on mobile */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3 md:gap-4">
+      {/* Quick Tiles Grid - responsive 2x2 grid layout */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 md:gap-4">
         {QUICK_TILES.map(tile => (
           <Card
             key={tile.id}
@@ -1007,6 +1009,540 @@ export function ConversationalChat({
     }, 500);
   }, [addMessage, markStepCompleted, handleToolSelection, schedule, addProcessingMessage]);
 
+  const handleAdvancedClientSetup = useCallback(() => {
+    addMessage(
+      "Welcome! Let's create a new client. Here's what we'll accomplish together:",
+      'assistant',
+      {
+        component: (
+          <div className="space-y-4">
+            <Steps
+              kind="steps"
+              variant="overview"
+              steps={[]}
+              title="Client Setup Process"
+              showIndex={true}
+              locked={false}
+            />
+            <div className="text-sm text-muted-foreground space-y-1">
+              <div>• Gather basic client information</div>
+              <div>• Configure delivery settings</div>
+              <div>• Generate secure credentials</div>
+              <div>• Review and activate the client</div>
+            </div>
+            <Button 
+              onClick={() => proceedToAdvancedBasicInfo()} 
+              className="gap-2 font-medium"
+              disabled={false}
+            >
+              <ArrowRight className="w-4 h-4" />
+              Begin Setup
+            </Button>
+          </div>
+        ),
+        stepId: 'advanced-overview'
+      }
+    );
+  }, [addMessage]);
+
+  const proceedToAdvancedBasicInfo = useCallback(() => {
+    addSimpleMessage('Begin Setup', 'user');
+    markStepCompleted('advanced-overview');
+    setCurrentStep('adv-basic-info');
+    
+    schedule(() => {
+      const basicFields: FormField[] = [
+        {
+          id: 'companyName',
+          label: 'Company Name',
+          type: 'text',
+          required: true,
+          placeholder: 'e.g., CPS'
+        },
+        {
+          id: 'contactEmail',
+          label: 'Contact Email',
+          type: 'email',
+          required: true,
+          placeholder: 'e.g., client@example.com'
+        }
+      ];
+
+      const credentialsSection: FormSection = {
+        id: 'credentials',
+        title: 'Auto-Generated Credentials',
+        description: 'Secure login details will be auto-generated from your email',
+        fields: [
+          {
+            id: 'username',
+            label: 'Username',
+            type: 'text',
+            value: '',
+            required: false,
+            placeholder: 'Will be generated from email address'
+          },
+          {
+            id: 'tempPassword',
+            label: 'Temporary Password',
+            type: 'text',
+            value: '',
+            required: false,
+            placeholder: 'Will be auto-generated securely'
+          }
+        ]
+      };
+
+      addAgentResponse(
+        "Let's start with the client's basic details. I'll auto-generate secure credentials once you provide:",
+        <Form
+          kind="form"
+          title="Client Information"
+          description="Company Name and Contact Email (used for portal access)"
+          sections={[
+            {
+              id: 'basic',
+              fields: basicFields
+            },
+            credentialsSection
+          ]}
+          validations={[
+            { fieldId: 'companyName', rule: 'required', message: 'Company name is required' },
+            { fieldId: 'contactEmail', rule: 'required', message: 'Email is required' },
+            { fieldId: 'contactEmail', rule: 'regex', pattern: '^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$', message: 'Please enter a valid email' }
+          ]}
+          derive={[
+            {
+              fieldId: 'username',
+              from: ['contactEmail'],
+              strategy: 'usernameFromEmail',
+              editable: true
+            },
+            {
+              fieldId: 'tempPassword',
+              from: ['contactEmail'],
+              strategy: 'strongPassword',
+              editable: true
+            }
+          ]}
+          submitLabel="Continue to Delivery Method"
+          onSubmit={handleAdvancedBasicInfoSubmit}
+          onRequestDerive={handleDerive}
+          derivedValues={derivedValues}
+          disabled={completedSteps.has('adv-basic-info') && currentStep !== 'adv-basic-info'}
+          locked={completedSteps.has('adv-basic-info') && currentStep !== 'adv-basic-info'}
+        />,
+        undefined,
+        undefined,
+        'adv-basic-info'
+      );
+    }, 500);
+  }, [addSimpleMessage, markStepCompleted, addAgentResponse, completedSteps, currentStep, schedule, handleDerive, derivedValues]);
+
+  const handleAdvancedBasicInfoSubmit = useCallback((data: Record<string, any>) => {
+    const { companyName, contactEmail } = data;
+    addSimpleMessage(`Company: ${companyName}, Email: ${contactEmail}`, 'user');
+    
+    clearDerivedValues();
+    markStepCompleted('adv-basic-info');
+    setCurrentStep('adv-delivery-method');
+    
+    schedule(() => {
+      addAgentResponse(
+        "Now, select how leads will be delivered to this client. You can skip this step and configure later if needed.",
+        <ChoiceList
+          kind="choices"
+          title="Choose Delivery Method"
+          options={DELIVERY_OPTIONS}
+          mode="single"
+          layout="card"
+          onChange={(value) => handleAdvancedDeliveryMethodSelect(value as string)}
+          disabled={completedSteps.has('adv-delivery-method') && currentStep !== 'adv-delivery-method'}
+          locked={completedSteps.has('adv-delivery-method') && currentStep !== 'adv-delivery-method'}
+        />,
+        undefined,
+        undefined,
+        'adv-delivery-method'
+      );
+    }, 500);
+  }, [addSimpleMessage, markStepCompleted, addAgentResponse, completedSteps, currentStep, schedule, clearDerivedValues]);
+
+  const handleAdvancedStatusSelect = useCallback((status: string) => {
+    addSimpleMessage(`Selected status: ${status}`, 'user');
+    markStepCompleted('adv-status-group');
+    setCurrentStep('adv-portal-access');
+    
+    schedule(() => {
+      // Generate credentials
+      const username = `client_${Date.now().toString(36)}`;
+      const tempPassword = `Temp${Math.random().toString(36).substr(2, 8)}!`;
+      
+      addAgentResponse(
+        `Portal access will be created automatically. Login details will be:\n\nUsername: ${username}\nTemporary Password: ${tempPassword}\n\n*Note: The client will need to change the password on first login.*`,
+        <Alert
+          kind="alert"
+          type="info"
+          title="Portal Credentials Generated"
+          message={`Username: ${username}\nPassword: ${tempPassword}\n\nThese credentials will be sent to the contact email.`}
+          disabled={completedSteps.has('adv-portal-access') && currentStep !== 'adv-portal-access'}
+          locked={completedSteps.has('adv-portal-access') && currentStep !== 'adv-portal-access'}
+        />,
+        [
+          {
+            id: 'continue-delivery',
+            label: 'Continue',
+            variant: 'default' as const,
+            icon: <ArrowRight className="w-4 h-4" />,
+            onClick: () => proceedToDeliveryDecision()
+          }
+        ],
+        undefined,
+        undefined,
+        'adv-portal-access'
+      );
+    }, 500);
+  }, [addSimpleMessage, markStepCompleted, addAgentResponse, schedule]);
+
+  const proceedToDeliveryDecision = useCallback(() => {
+    addSimpleMessage('Continue', 'user');
+    markStepCompleted('adv-portal-access');
+    setCurrentStep('adv-delivery-decision');
+    
+    schedule(() => {
+      const deliveryDecisionOptions = [
+        {
+          id: 'yes',
+          label: 'Yes - Complete full setup',
+          description: 'Configure delivery methods and lead settings now',
+          icon: 'Settings'
+        },
+        {
+          id: 'no',
+          label: 'No - Save client and configure later',
+          description: 'Create the client and set up delivery later',
+          icon: 'Save'
+        }
+      ];
+
+      addAgentResponse(
+        "Would you like to configure delivery settings now?",
+        <ChoiceList
+          kind="choices"
+          title="Configure Delivery Settings"
+          options={deliveryDecisionOptions}
+          mode="single"
+          layout="simple"
+          onChange={(value) => handleDeliveryDecision(value as string)}
+          disabled={completedSteps.has('adv-delivery-decision') && currentStep !== 'adv-delivery-decision'}
+          locked={completedSteps.has('adv-delivery-decision') && currentStep !== 'adv-delivery-decision'}
+        />,
+        undefined,
+        undefined,
+        'adv-delivery-decision'
+      );
+    }, 500);
+  }, [addSimpleMessage, markStepCompleted, addAgentResponse, completedSteps, currentStep, schedule]);
+
+  const handleDeliveryDecision = useCallback((decision: string) => {
+    addSimpleMessage(`${decision === 'yes' ? 'Yes - Complete full setup' : 'No - Save and configure later'}`, 'user');
+    markStepCompleted('adv-delivery-decision');
+    
+    if (decision === 'yes') {
+      // Continue with delivery configuration
+      setCurrentStep('adv-delivery-method');
+      
+      schedule(() => {
+        const deliveryMethods = [
+          { id: 'email', label: 'Email', description: 'Simple email delivery', icon: 'Mail' },
+          { id: 'webhook', label: 'HTTP Webhook/API', description: 'Real-time API integration', icon: 'Webhook' },
+          { id: 'ftp', label: 'FTP', description: 'File transfer protocol', icon: 'Database' },
+          { id: 'pingpost', label: 'Ping/Post', description: 'Two-step lead verification', icon: 'Zap' },
+          { id: 'portal', label: 'Portal Delivery', description: 'Client portal only', icon: 'Globe' }
+        ];
+
+        addAgentResponse(
+          "First, let's set up HOW leads will be delivered. What delivery method would you like to use?",
+          <ChoiceList
+            kind="choices"
+            title="Choose Delivery Method"
+            options={deliveryMethods}
+            mode="single"
+            layout="card"
+            onChange={(value) => handleAdvancedDeliveryMethodSelect(value as string)}
+            disabled={completedSteps.has('adv-delivery-method') && currentStep !== 'adv-delivery-method'}
+            locked={completedSteps.has('adv-delivery-method') && currentStep !== 'adv-delivery-method'}
+          />,
+          undefined,
+          undefined,
+          'adv-delivery-method'
+        );
+      }, 500);
+    } else {
+      // Skip to summary
+      proceedToAdvancedSummary(false);
+    }
+  }, [addSimpleMessage, markStepCompleted, addAgentResponse, completedSteps, currentStep, schedule]);
+
+  const handleAdvancedDeliveryMethodSelect = useCallback((method: string) => {
+    const methodLabel = DELIVERY_METHOD_LABELS[method] || method;
+    addSimpleMessage(`Selected: ${methodLabel}`, 'user');
+    markStepCompleted('delivery-method');
+    
+    if (method === 'skip') {
+      // Skip to review if they chose skip
+      proceedToAdvancedReview();
+      return;
+    }
+    
+    setCurrentStep('delivery-config');
+    
+    schedule(() => {
+      // Show different form based on delivery method
+      let configFields: FormField[] = [];
+      let configTitle = '';
+      let configDescription = '';
+      let suggestedActions: SuggestedAction[] | undefined = undefined;
+      
+      if (method === 'email') {
+        configTitle = 'Email Delivery Configuration';
+        configDescription = 'Set up email delivery details';
+        configFields = [
+          { id: 'recipientEmail', label: 'Recipient Email Address', type: 'email', required: true, placeholder: 'client@example.com' },
+          { id: 'format', label: 'Email Format', type: 'select', required: true, value: 'html', options: [
+            { value: 'html', label: 'HTML Format' },
+            { value: 'text', label: 'Plain Text' }
+          ]},
+          { id: 'frequency', label: 'Send Frequency', type: 'select', required: true, value: 'realtime', options: [
+            { value: 'realtime', label: 'Real-time' },
+            { value: 'batch', label: 'Batch (hourly)' }
+          ]}
+        ];
+      } else if (method === 'webhook') {
+        configTitle = 'Webhook Configuration';
+        configDescription = 'Set up real-time API delivery with testing';
+        configFields = [
+          { id: 'endpointUrl', label: 'Endpoint URL', type: 'url', required: true, placeholder: 'https://api.example.com/leads' },
+          { id: 'authMethod', label: 'Authentication Method', type: 'select', required: true, value: 'apikey', options: [
+            { value: 'apikey', label: 'API Key' },
+            { value: 'basic', label: 'Basic Auth' },
+            { value: 'none', label: 'No Authentication' }
+          ]},
+          { id: 'apiKey', label: 'API Key', type: 'text', placeholder: 'Enter your API key (if applicable)' }
+        ];
+        suggestedActions = [
+          {
+            id: 'test-connection',
+            label: 'Test Connection',
+            variant: 'outline' as const,
+            icon: <ExternalLink className="w-4 h-4" />,
+            onClick: () => handleTestConnection()
+          }
+        ];
+      } else if (method === 'ftp') {
+        configTitle = 'FTP Configuration';
+        configDescription = 'Set up file transfer protocol delivery';
+        configFields = [
+          { id: 'ftpHost', label: 'FTP Host', type: 'text', required: true, placeholder: 'ftp.example.com' },
+          { id: 'ftpUsername', label: 'FTP Username', type: 'text', required: true },
+          { id: 'ftpPassword', label: 'FTP Password', type: 'password', required: true },
+          { id: 'ftpPath', label: 'Upload Directory', type: 'text', placeholder: '/leads/' }
+        ];
+      }
+      
+      addAgentResponse(
+        method === 'webhook' 
+          ? `Great! Let's configure the webhook. You'll be able to test the connection before we proceed.`
+          : `Let's configure ${methodLabel.toLowerCase()} for this client:`,
+        <Form
+          kind="form"
+          title={configTitle}
+          description={configDescription}
+          fields={configFields}
+          submitLabel="Save Configuration"
+          onSubmit={(data) => handleAdvancedDeliveryConfigSubmit(method, data)}
+          disabled={completedSteps.has('delivery-config') && currentStep !== 'delivery-config'}
+          locked={completedSteps.has('delivery-config') && currentStep !== 'delivery-config'}
+        />,
+        suggestedActions,
+        undefined,
+        'delivery-config'
+      );
+    }, 500);
+  }, [addSimpleMessage, markStepCompleted, addAgentResponse, completedSteps, currentStep, schedule]);
+
+  const handleTestConnection = useCallback(() => {
+    addSimpleMessage('Test connection', 'user');
+    
+    // Simulate test connection
+    addProcessingMessage('Testing webhook connection...');
+    
+    schedule(() => {
+      addAgentResponse(
+        '✅ Connection test successful! The webhook endpoint responded correctly. You can now save this configuration.',
+        <Alert
+          kind="alert"
+          type="success"
+          title="Connection Test Passed"
+          message="The webhook endpoint is reachable and responded with a 200 OK status. The connection is ready for lead delivery."
+        />
+      );
+    }, 1500);
+  }, [addSimpleMessage, addProcessingMessage, addAgentResponse, schedule]);
+
+  const handleAdvancedDeliveryConfigSubmit = useCallback((method: string, config: Record<string, any>) => {
+    addSimpleMessage('Save Configuration', 'user');
+    markStepCompleted('delivery-config');
+    
+    // Proceed to review
+    proceedToAdvancedReview();
+  }, [addSimpleMessage, markStepCompleted]);
+
+  const proceedToAdvancedReview = useCallback(() => {
+    setCurrentStep('review');
+    
+    schedule(() => {
+      // Review summary with all configured settings
+      const reviewSections: FormSection[] = [
+        {
+          id: 'client-info',
+          title: 'Client Information',
+          fields: [
+            { id: 'companyName', label: 'Company Name', type: 'text', value: 'CPS', disabled: true },
+            { id: 'contactEmail', label: 'Contact Email', type: 'email', value: 'client@cps.com', disabled: true }
+          ]
+        },
+        {
+          id: 'credentials',
+          title: 'Portal Credentials',
+          fields: [
+            { id: 'username', label: 'Username', type: 'text', value: 'cps_client', disabled: true },
+            { id: 'password', label: 'Temporary Password', type: 'text', value: 'Temp123!@#', disabled: true }
+          ]
+        },
+        {
+          id: 'delivery',
+          title: 'Delivery Configuration',
+          fields: [
+            { id: 'method', label: 'Delivery Method', type: 'text', value: 'Webhook', disabled: true },
+            { id: 'status', label: 'Status', type: 'text', value: 'Configured', disabled: true }
+          ]
+        }
+      ];
+      
+      const activationOptions = [
+        {
+          id: 'activate',
+          label: 'Activate Now',
+          description: 'Client will be active and can receive leads immediately',
+          icon: 'CheckCircle'
+        },
+        {
+          id: 'pending',
+          label: 'Keep as Pending',
+          description: 'Client will be created but inactive until manually activated',
+          icon: 'Clock'
+        },
+        {
+          id: 'edit',
+          label: 'Edit Configuration',
+          description: 'Go back and modify settings before saving',
+          icon: 'Edit'
+        }
+      ];
+      
+      addAgentResponse(
+        "Perfect! Here's a summary of the client configuration. Choose how you'd like to proceed:",
+        <div className="space-y-6">
+          <Form
+            kind="form"
+            title="Review Client Configuration"
+            description="Verify all settings before creating the client"
+            sections={reviewSections}
+            submitLabel=""
+            disabled={true}
+            locked={completedSteps.has('review') && currentStep !== 'review'}
+          />
+          <ChoiceList
+            kind="choices"
+            title="Activation Options"
+            options={activationOptions}
+            mode="single"
+            layout="simple"
+            onChange={(value) => handleAdvancedActivationChoice(value as string)}
+            disabled={completedSteps.has('review') && currentStep !== 'review'}
+            locked={completedSteps.has('review') && currentStep !== 'review'}
+          />
+        </div>,
+        undefined,
+        undefined,
+        'review'
+      );
+    }, 500);
+  }, [addAgentResponse, completedSteps, currentStep, schedule]);
+
+  const handleAdvancedActivationChoice = useCallback((choice: string) => {
+    if (choice === 'edit') {
+      addSimpleMessage('Edit Configuration', 'user');
+      // Reset to basic info step
+      setCurrentStep('basic-info');
+      setCompletedSteps(new Set());
+      proceedToAdvancedBasicInfo();
+      return;
+    }
+    
+    const choiceLabel = choice === 'activate' ? 'Activate Now' : 'Keep as Pending';
+    addSimpleMessage(choiceLabel, 'user');
+    markStepCompleted('review');
+    
+    // Create success message
+    addProcessingMessage('Creating client in LeadExec...');
+    
+    schedule(() => {
+      const status = choice === 'activate' ? 'Active' : 'Pending';
+      
+      addAgentResponse(
+        `✅ Client successfully created! The client is now ${status.toLowerCase()} in LeadExec.`,
+        <SummaryCard
+          kind="summary"
+          title="Client Created Successfully"
+          status={choice === 'activate' ? 'success' : 'info'}
+          items={[
+            { label: 'Company', value: 'CPS' },
+            { label: 'Status', value: status },
+            { label: 'Portal Access', value: 'Enabled' },
+            { label: 'Delivery Method', value: 'Configured' },
+            { label: 'Client ID', value: 'CL-2024-0042' }
+          ]}
+        />,
+        [
+          {
+            id: 'view-client',
+            label: 'View Client Details',
+            variant: 'default' as const,
+            icon: <ExternalLink className="w-4 h-4" />,
+            onClick: () => addSimpleMessage('View client details', 'user')
+          },
+          {
+            id: 'create-another',
+            label: 'Create Another Client',
+            variant: 'outline' as const,
+            icon: <Plus className="w-4 h-4" />,
+            onClick: () => handleToolSelection('create-new-client')
+          },
+          {
+            id: 'back-to-tools',
+            label: 'Back to Tools',
+            variant: 'ghost' as const,
+            icon: <Home className="w-4 h-4" />,
+            onClick: () => handleStartOver()
+          }
+        ]
+      );
+      
+      // Mark flow as complete
+      setFlowActive(false);
+    }, 1500);
+  }, [addSimpleMessage, markStepCompleted, addProcessingMessage, addAgentResponse, schedule, handleToolSelection, handleStartOver]);
+
   const handleBulkUpload = useCallback(() => {
 
     addMessage(
@@ -1503,13 +2039,13 @@ export function ConversationalChat({
                             return (
                               <Button
                                 key={action.id}
-                                variant={isSelected ? 'default' : (action.variant || 'outline')}
+                                variant={action.variant || 'outline'}
                                 size="sm"
                                 className={`h-8 text-xs gap-2 transition-colors ${
                                   isLocked 
                                     ? 'opacity-40 pointer-events-none bg-muted/20' 
                                     : isSelected 
-                                      ? 'bg-primary text-primary-foreground border-primary' 
+                                      ? 'border-primary bg-primary/5 text-primary hover:bg-primary/10' 
                                       : ''
                                 }`}
                                 disabled={action.disabled || isLocked}
