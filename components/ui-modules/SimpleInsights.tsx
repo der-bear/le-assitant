@@ -100,7 +100,7 @@ export function SimpleInsights({
 
         {/* Metrics Grid */}
         {metrics.length > 0 && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
             {metrics.map(metric => (
               <div key={metric.id} className="bg-muted/30 p-3 rounded-lg">
                 <div className="flex items-center justify-between mb-1">

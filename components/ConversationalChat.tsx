@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Card } from './ui/card';
@@ -60,7 +60,7 @@ export function ConversationalChat({
   const [isProcessing, setIsProcessing] = useState(false);
   const [messageCounter, setMessageCounter] = useState(1);
   const [currentFlow, setCurrentFlow] = useState<string | null>(null);
-  const [completedSteps, setCompletedSteps] = useState<Set<string>>(new Set());
+  const [completedSteps, setCompletedSteps] = useState<Map<string, Set<string>>>(new Map());
   const [showWelcome, setShowWelcome] = useState(true);
   const [flowActive, setFlowActive] = useState(false);
   const [currentStep, setCurrentStep] = useState<string | null>(null);
@@ -178,7 +178,7 @@ export function ConversationalChat({
   const handleStartOver = useCallback(() => {
     resetSession();
     setCurrentFlow(null);
-    setCompletedSteps(new Set());
+    setCompletedSteps(new Map());
     setFlowActive(false);
     clearDerivedValues();
     setCurrentStep(null);
@@ -214,8 +214,8 @@ export function ConversationalChat({
   // Enhanced Welcome Cards Component - responsive horizontal layout on mobile
   const WelcomeCards = useCallback(() => (
     <div className="space-y-6">
-      {/* Quick Tiles Grid - responsive 2x2 grid layout */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 md:gap-4">
+      {/* Quick Tiles Grid - responsive grid layout */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
         {QUICK_TILES.map(tile => (
           <Card
             key={tile.id}
@@ -259,20 +259,17 @@ export function ConversationalChat({
   ]);
 
   const scrollToBottom = useCallback(() => {
-    // Use double requestAnimationFrame to ensure DOM has fully updated with new content
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        // Add a longer delay for complex components to fully render
-        setTimeout(() => {
-          messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-        }, 200);
-      });
-    });
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, []);
 
+  // Only scroll when messages actually change (not on re-renders)
   useEffect(() => {
-    scrollToBottom();
-  }, [messages, scrollToBottom]);
+    // Small delay to let content render
+    const timeoutId = setTimeout(() => {
+      scrollToBottom();
+    }, 100);
+    return () => clearTimeout(timeoutId);
+  }, [messages.length, scrollToBottom]);
 
   const handleUnimplementedTool = useCallback((toolId: string) => {
     const toolInfo = TOOL_CATEGORIES[toolId] || { category: 'General', alternativeTools: [] };
@@ -323,8 +320,6 @@ export function ConversationalChat({
   const startGuidedFlow = useCallback((flowId: string) => {
     if (flowId === 'create-new-client') {
       handleClientSetup();
-    } else if (flowId === 'create-new-client-draft') {
-      handleClientSetupDraft();
     } else if (flowId === 'bulk-client-upload') {
       handleBulkUpload();
     } else {
@@ -347,13 +342,37 @@ export function ConversationalChat({
     addSimpleMessage(`${toolName}`, 'user');
 
     setCurrentFlow(toolId);
-    setCompletedSteps(new Set());
+    // Don't reset all completed steps - only initialize current flow if needed
+    setCompletedSteps(prev => {
+      const newMap = new Map(prev);
+      if (!newMap.has(toolId)) {
+        newMap.set(toolId, new Set());
+      }
+      return newMap;
+    });
     setCurrentStep(null);
 
     schedule(() => {
       startGuidedFlow(toolId);
     }, 500);
   }, [addMessage, onShowAllTools, onWelcomeComplete, resetSession, schedule, startGuidedFlow]);
+
+  // Start a new flow while preserving completed steps from previous flows
+  const startNewFlow = useCallback((toolId: string) => {
+    resetSession();
+    setFlowActive(true);
+    
+    const toolName = TOOL_NAMES[toolId] || toolId;
+    addSimpleMessage(`${toolName}`, 'user');
+    
+    // Start new flow but keep completed steps locked
+    setCurrentFlow(toolId);
+    setCurrentStep(null);
+    
+    schedule(() => {
+      startGuidedFlow(toolId);
+    }, 500);
+  }, [addSimpleMessage, resetSession, schedule, startGuidedFlow]);
 
   // Handle tool selection from outside
   const lastProcessedToolRef = useRef<string | null>(null);
@@ -392,14 +411,34 @@ export function ConversationalChat({
   }, [selectedTool, onToolProcessed, onWelcomeComplete, onShowAllTools, addMessage, resetSession, schedule, startGuidedFlow]);
 
   const markStepCompleted = useCallback((stepId: string) => {
-    setCompletedSteps(prev => new Set([...prev, stepId]));
-  }, []);
+    if (!currentFlow) return;
+    
+    setCompletedSteps(prev => {
+      const newMap = new Map(prev);
+      const flowSteps = newMap.get(currentFlow) || new Set();
+      flowSteps.add(stepId);
+      newMap.set(currentFlow, flowSteps);
+      return newMap;
+    });
+  }, [currentFlow]);
+
+  // Helper to determine if a step should be locked (only locks flow-breaking elements)
+  const shouldLockStep = useCallback((stepId: string) => {
+    if (!stepId) return false;
+    
+    // Check if this step is completed in ANY flow
+    for (const [flowId, flowSteps] of completedSteps.entries()) {
+      if (flowSteps.has(stepId)) {
+        // Step is completed, lock it unless it's the current active step
+        return currentStep !== stepId;
+      }
+    }
+    
+    return false;
+  }, [completedSteps, currentStep]);
 
   // Helper to handle suggested action clicks with locking and selection logic
   const handleSuggestedActionClick = useCallback((actionId: string, originalOnClick: () => void) => {
-    // Prevent click if flow is active and this isn't a welcome message action
-    if (flowActive) return;
-    
     // Mark this action as selected
     setSelectedActions(prev => new Set([...prev, actionId]));
     
@@ -415,8 +454,9 @@ export function ConversationalChat({
     originalOnClick();
   }, [flowActive]);
 
-  const handleClientSetup = useCallback(() => {
 
+  // ===== CLIENT SETUP FLOW =====
+  const handleClientSetup = useCallback(() => {
     addMessage(
       'I\'ll guide you through the LeadExec client setup process. Here\'s what we\'ll accomplish together:',
       'assistant',
@@ -427,7 +467,7 @@ export function ConversationalChat({
               kind="steps"
               variant="overview"
               steps={CLIENT_SETUP_STEPS}
-              title="Client Setup Process"
+              title="Client Setup Process (Draft)"
               showIndex={true}
               locked={false}
             />
@@ -444,1146 +484,9 @@ export function ConversationalChat({
         stepId: 'setup-overview'
       }
     );
-  }, [addMessage]);
+  }, [addMessage, shouldLockStep]);
 
   const proceedToBasicInfo = useCallback(() => {
-    addSimpleMessage('Start Setup', 'user');
-    
-    // Mark setup overview as completed
-    markStepCompleted('setup-overview');
-    setCurrentStep('basic-info');
-    
-    schedule(() => {
-      // Reset derived values for new form
-      clearDerivedValues();
-      
-      const formFields: FormField[] = [
-        { 
-          id: 'companyName', 
-          label: 'Company Name', 
-          type: 'text' as const, 
-          required: true, 
-          placeholder: 'Enter company name' 
-        },
-        { 
-          id: 'email', 
-          label: 'Email Address', 
-          type: 'email' as const, 
-          required: true, 
-          placeholder: 'Enter email address' 
-        }
-      ];
-
-      const credentialsSection: FormSection = {
-        id: 'credentials',
-        title: 'Client Credentials',
-        description: 'Username and password will be auto-generated when you enter a valid email',
-        fields: [
-          {
-            id: 'username',
-            label: 'Username',
-            type: 'text' as const,
-            value: '',
-            required: false, // Not required since it's auto-generated
-            placeholder: 'Will be generated from email address'
-          },
-          {
-            id: 'tempPassword',
-            label: 'Password',
-            type: 'text' as const,
-            value: '',
-            required: false, // Not required since it's auto-generated
-            placeholder: 'Will be auto-generated securely'
-          }
-        ]
-        // No reveal rule - show by default
-      };
-
-      // Working validation rules with correct email regex
-      const validationRules: ValidationRule[] = [
-        {
-          fieldId: 'companyName',
-          rule: 'required' as const,
-          message: 'Company name is required'
-        },
-        {
-          fieldId: 'email',
-          rule: 'required' as const,
-          message: 'Email address is required'
-        },
-        {
-          fieldId: 'email',
-          rule: 'regex' as const,
-          pattern: '^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$',
-          message: 'Please enter a valid email address'
-        }
-      ];
-
-      addAgentResponse(
-        'Great! Let\'s start with the basic client information. I\'ll automatically generate secure credentials once you provide the company name and email.',
-        <Form
-          kind="form"
-          title="Client Information"
-          description="Enter basic client details. Credentials will be generated automatically."
-          sections={[
-            {
-              id: 'basic',
-              fields: formFields
-            },
-            credentialsSection
-          ]}
-          validations={validationRules}
-          derive={[
-            {
-              fieldId: 'username',
-              from: ['email'],
-              strategy: 'usernameFromEmail',
-              editable: true
-            },
-            {
-              fieldId: 'tempPassword',
-              from: ['email'],
-              strategy: 'strongPassword',
-              editable: true
-            }
-          ]}
-          submitLabel="Continue"
-          onSubmit={handleBasicInfoSubmit}
-          onRequestDerive={handleDerive}
-          derivedValues={derivedValues}
-          loading={false}
-          disabled={completedSteps.has('basic-info') && currentStep !== 'basic-info'}
-          locked={completedSteps.has('basic-info') && currentStep !== 'basic-info'}
-        />,
-        undefined, // suggestedActions
-        undefined, // sources  
-        'basic-info' // stepId
-      );
-    }, 500);
-  }, [addMessage, completedSteps, currentStep, derivedValues, schedule]);
-
-  // Update messages when derived values change
-  useEffect(() => {
-    if (Object.keys(derivedValues).length > 0) {
-      setMessages(prev => prev.map(msg => {
-        if (msg.stepId === 'basic-info' && msg.component) {
-          console.log('🔄 Updating form message with derived values:', derivedValues);
-          return {
-            ...msg,
-            component: React.cloneElement(msg.component as React.ReactElement, {
-              derivedValues
-            })
-          };
-        }
-        return msg;
-      }));
-    }
-  }, [derivedValues]);
-
-  const handleBasicInfoSubmit = useCallback((data: Record<string, any>) => {
-    addSimpleMessage(`Company: ${data.companyName}, Email: ${data.email}`, 'user');
-    
-    // Clear derived values after submit
-    clearDerivedValues();
-    
-    // Mark basic info step as completed
-    markStepCompleted('basic-info');
-    setCurrentStep('delivery-method');
-    
-    schedule(() => {
-
-      addMessage(
-        `Perfect! I've got the client information for ${data.companyName}. Now let's choose how leads will be delivered:`,
-        'assistant',
-        {
-          component: (
-            <ChoiceList
-              kind="choices"
-              title="Choose Delivery Method"
-              description="Select how leads will be sent to your client"
-              options={DELIVERY_OPTIONS}
-              mode="single"
-              layout="card"
-              onChange={(value) => handleDeliveryMethodSelect(value as string)}
-              disabled={completedSteps.has('delivery-method') && currentStep !== 'delivery-method'}
-              locked={completedSteps.has('delivery-method') && currentStep !== 'delivery-method'}
-            />
-          ),
-          stepId: 'delivery-method'
-        }
-      );
-    }, 500);
-  }, [addMessage, markStepCompleted, completedSteps, currentStep, schedule]);
-
-  const handleDeliveryMethodSelect = useCallback((method: string) => {
-    addSimpleMessage(`Selected: ${DELIVERY_METHOD_LABELS[method] || method}`, 'user');
-    
-    // Mark delivery method step as completed
-    markStepCompleted('delivery-method');
-    setCurrentStep('delivery-config');
-    
-    schedule(() => {
-      // Step 2b: Based on delivery choice, show specific configuration form
-      if (method === 'email') {
-        addMessage(
-          'Configure email delivery settings for your client.',
-          'assistant',
-          {
-            component: (
-              <Form
-                kind="form"
-                title="Email Delivery Configuration"
-                description="Set up how leads will be delivered via email"
-                fields={[
-                  {
-                    id: 'emailAddress',
-                    label: 'Delivery Email Address',
-                    type: 'email' as const,
-                    required: true,
-                    placeholder: 'Enter client email address'
-                  },
-                  {
-                    id: 'emailFormat',
-                    label: 'Email Format',
-                    type: 'select' as const,
-                    required: true,
-                    value: 'html',
-                    options: [
-                      { value: 'html', label: 'HTML Format' },
-                      { value: 'plain', label: 'Plain Text' }
-                    ]
-                  },
-                  {
-                    id: 'includeAttachment',
-                    label: 'Include Lead Details as Attachment',
-                    type: 'checkbox' as const,
-                    value: true
-                  }
-                ]}
-                validations={[
-                  {
-                    fieldId: 'emailAddress',
-                    rule: 'required' as const,
-                    message: 'Email address is required'
-                  },
-                  {
-                    fieldId: 'emailAddress',
-                    rule: 'regex' as const,
-                    pattern: '^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$',
-                    message: 'Please enter a valid email address'
-                  },
-                  {
-                    fieldId: 'emailFormat',
-                    rule: 'required' as const,
-                    message: 'Email format is required'
-                  }
-                ]}
-                submitLabel="Continue to Configuration"
-                onSubmit={handleDeliveryConfigSubmit}
-                disabled={completedSteps.has('delivery-config') && currentStep !== 'delivery-config'}
-                locked={completedSteps.has('delivery-config') && currentStep !== 'delivery-config'}
-              />
-            ),
-            stepId: 'delivery-config'
-          }
-        );
-      } else if (method === 'webhook') {
-        addMessage(
-          'Configure webhook delivery settings for real-time lead integration.',
-          'assistant',
-          {
-            component: (
-              <Form
-                kind="form"
-                title="HTTP Webhook Configuration"
-                description="Set up real-time API delivery to client systems"
-                fields={[
-                  {
-                    id: 'webhookUrl',
-                    label: 'Webhook URL',
-                    type: 'url' as const,
-                    required: true,
-                    placeholder: 'https://client.example.com/webhook/leads'
-                  },
-                  {
-                    id: 'webhookSecret',
-                    label: 'Webhook Secret',
-                    type: 'password' as const,
-                    placeholder: 'Optional authentication secret'
-                  },
-                  {
-                    id: 'webhookMethod',
-                    label: 'HTTP Method',
-                    type: 'select' as const,
-                    required: true,
-                    value: 'POST',
-                    options: [
-                      { value: 'POST', label: 'POST' },
-                      { value: 'PUT', label: 'PUT' }
-                    ]
-                  }
-                ]}
-                validations={[
-                  {
-                    fieldId: 'webhookUrl',
-                    rule: 'required' as const,
-                    message: 'Webhook URL is required'
-                  },
-                  {
-                    fieldId: 'webhookUrl',
-                    rule: 'regex' as const,
-                    pattern: '^https?://[^\\s]+$',
-                    message: 'Please enter a valid URL'
-                  },
-                  {
-                    fieldId: 'webhookMethod',
-                    rule: 'required' as const,
-                    message: 'HTTP method is required'
-                  }
-                ]}
-                submitLabel="Continue to Configuration"
-                onSubmit={handleDeliveryConfigSubmit}
-                disabled={completedSteps.has('delivery-config') && currentStep !== 'delivery-config'}
-                locked={completedSteps.has('delivery-config') && currentStep !== 'delivery-config'}
-              />
-            ),
-            stepId: 'delivery-config'
-          }
-        );
-      } else if (method === 'ftp') {
-        addMessage(
-          'Upload an FTP template file or use our default format.',
-          'assistant',
-          {
-            component: (
-              <div className="space-y-6">
-                <FileDrop
-                  kind="filedrop"
-                  title="FTP Configuration Template"
-                  description="Upload your FTP configuration template"
-                  accept=".csv,.xlsx,.xml"
-                  multiple={false}
-                  maxSizeMb={5}
-                />
-                <div className="flex gap-3">
-                  <Button onClick={() => handleDeliveryConfigSubmit({ useDefault: true })} className="font-medium">
-                    Continue
-                  </Button>
-                </div>
-              </div>
-            ),
-            stepId: 'delivery-config'
-          }
-        );
-      } else {
-        // Skip delivery configuration
-        handleDeliveryConfigSubmit({ skipped: true });
-      }
-    }, 500);
-  }, [addMessage, markStepCompleted, completedSteps, currentStep, schedule]);
-
-  const handleDeliveryConfigSubmit = useCallback((config: Record<string, any>) => {
-    console.log('🔧 handleDeliveryConfigSubmit called with config:', config);
-    addSimpleMessage('Delivery configuration saved', 'user');
-    
-    // Mark delivery configuration as completed
-    markStepCompleted('delivery-config');
-    setCurrentStep('configuration');
-    
-    schedule(() => {
-      console.log('🔧 Adding Configuration form message');
-      // Step 3: Configuration & Creation
-      addMessage(
-        'Configure additional client settings and preferences.',
-        'assistant',
-        {
-          component: (
-            <Form
-              kind="form"
-              title="Client Configuration"
-              description="Set up client preferences and limits"
-              sections={[
-                {
-                  id: 'limits',
-                  title: 'Lead Limits & Pricing',
-                  fields: [
-                    {
-                      id: 'dailyLeadLimit',
-                      label: 'Daily Lead Limit',
-                      type: 'number' as const,
-                      value: 50,
-                      min: 1,
-                      max: 1000,
-                      placeholder: 'Maximum leads per day'
-                    },
-                    {
-                      id: 'leadPrice',
-                      label: 'Price Per Lead ($)',
-                      type: 'number' as const,
-                      value: 25,
-                      min: 1,
-                      placeholder: 'Cost per lead'
-                    }
-                  ]
-                },
-                {
-                  id: 'filtering',
-                  title: 'Lead Filtering',
-                  fields: [
-                    {
-                      id: 'leadTypes',
-                      label: 'Accepted Lead Types',
-                      type: 'select' as const,
-                      required: true,
-                      value: 'all',
-                      options: [
-                        { value: 'all', label: 'All Lead Types' },
-                        { value: 'residential', label: 'Residential Only' },
-                        { value: 'commercial', label: 'Commercial Only' },
-                        { value: 'custom', label: 'Custom Filter' }
-                      ]
-                    },
-                    {
-                      id: 'excludeWeekends',
-                      label: 'Exclude Weekend Leads',
-                      type: 'checkbox' as const,
-                      value: false
-                    }
-                  ]
-                }
-              ]}
-              validations={[
-                {
-                  fieldId: 'leadTypes',
-                  rule: 'required' as const,
-                  message: 'Lead type selection is required'
-                }
-              ]}
-              submitLabel="Create Client"
-              onSubmit={handleConfigurationSubmit}
-              disabled={completedSteps.has('configuration') && currentStep !== 'configuration'}
-              locked={completedSteps.has('configuration') && currentStep !== 'configuration'}
-            />
-          ),
-          stepId: 'configuration'
-        }
-      );
-    }, 500);
-  }, [addMessage, markStepCompleted, completedSteps, currentStep, schedule]);
-
-  const handleConfigurationSubmit = useCallback((configData: Record<string, any>) => {
-    addSimpleMessage('Final configuration saved', 'user');
-    markStepCompleted('configuration');
-    setCurrentStep('creation');
-
-    schedule(() => {
-      // Add processing message that auto-removes after 2.5 seconds
-      addProcessingMessage(
-        'Creating your client with the specified configuration...',
-        'Setting up client account and delivery configuration...'
-      );
-
-      // Simulate client creation process - wait for processing to complete
-      schedule(() => {
-        addAgentResponse(
-          'Client creation completed successfully!',
-          <SummaryCard
-            kind="summary"
-            title="Client Creation Summary"
-            items={[
-              {
-                id: 'client-created',
-                title: 'TechCorp Solutions',
-                subtitle: 'Client ID: CL-2024-001',
-                status: 'success' as const,
-                message: 'Client account created and activated',
-                link: {
-                  href: '/clients/CL-2024-001',
-                  label: 'View Client Details'
-                }
-              },
-              {
-                id: 'delivery-setup',
-                title: 'Email Delivery Configured',
-                subtitle: 'test@techcorp.com',
-                status: 'success' as const,
-                message: 'Delivery method configured and tested'
-              },
-              {
-                id: 'limits-configured',
-                title: 'Lead Limits Set',
-                subtitle: '50 leads/day at $25 each',
-                status: 'success' as const,
-                message: 'Daily limits and pricing configured'
-              }
-            ]}
-          />,
-          [
-            {
-              id: 'monitor-delivery',
-              label: 'Monitor Lead Delivery',
-              variant: 'outline' as const,
-              onClick: () => console.log('Navigate to analytics dashboard')
-            },
-            {
-              id: 'share-portal',
-              label: 'Share Client Portal Access',
-              variant: 'outline' as const,
-              onClick: () => console.log('Show portal credentials')
-            },
-            {
-              id: 'create-another',
-              label: 'Create Another Client',
-              variant: 'outline' as const,
-              onClick: () => handleToolSelection('create-new-client')
-            }
-          ],
-          [
-            {
-              id: 'client-docs',
-              title: 'Client Management Guide',
-              url: 'https://docs.example.com/clients',
-              type: 'documentation' as const
-            },
-            {
-              id: 'lead-delivery',
-              title: 'Lead Delivery Setup',
-              url: 'https://docs.example.com/lead-delivery',
-              type: 'guide' as const
-            }
-          ]
-        );
-
-        markStepCompleted('creation');
-        
-        // Complete the flow
-        setCurrentFlow(null);
-        setFlowActive(false);
-      }, 2500);
-    }, 500);
-  }, [addMessage, markStepCompleted, handleToolSelection, onShowAllTools, currentStep, schedule]);
-
-  // Also guard the legacy helper to avoid stray inserts
-  const oldHandleDeliveryMethodSelect = useCallback((method: string) => {
-    addSimpleMessage(`Selected: ${method} delivery`, 'user');
-    markStepCompleted('delivery-method');
-
-    schedule(() => {
-      // Add processing message that auto-removes after 2.5 seconds
-      addProcessingMessage(
-        'Great choice! I\'m now creating the client with your specified configuration.',
-        'Creating client and configuring delivery...'
-      );
-
-      // Simulate client creation process - wait for processing to complete
-      schedule(() => {
-        addMessage(
-          'Client created successfully! Your new client is ready to receive leads.',
-          'assistant',
-          {
-            component: (
-              <Alert
-                kind="alert"
-                type="success"
-                message="Client has been created and is now active in your LeadExec system."
-                title="Setup Complete!"
-              />
-            ),
-            stepId: 'creation-complete'
-          }
-        );
-        
-        // Add the action button as a separate message
-        schedule(() => {
-          addMessage(
-            '',
-            'assistant',
-            {
-              component: <div className="flex justify-start">
-                <Button 
-                  onClick={() => handleToolSelection('create-new-client')} 
-                  className="font-medium"
-                >
-                  Create Another Client
-                </Button>
-              </div>
-            }
-          );
-        }, 100);
-      }, 1500);
-    }, 500);
-  }, [addMessage, markStepCompleted, handleToolSelection, schedule, addProcessingMessage]);
-
-  const handleAdvancedClientSetup = useCallback(() => {
-    addMessage(
-      "Welcome! Let's create a new client. Here's what we'll accomplish together:",
-      'assistant',
-      {
-        component: (
-          <div className="space-y-4">
-            <Steps
-              kind="steps"
-              variant="overview"
-              steps={[]}
-              title="Client Setup Process"
-              showIndex={true}
-              locked={false}
-            />
-            <div className="text-sm text-muted-foreground space-y-1">
-              <div>• Gather basic client information</div>
-              <div>• Configure delivery settings</div>
-              <div>• Generate secure credentials</div>
-              <div>• Review and activate the client</div>
-            </div>
-            <Button 
-              onClick={() => proceedToAdvancedBasicInfo()} 
-              className="gap-2 font-medium"
-              disabled={false}
-            >
-              <ArrowRight className="w-4 h-4" />
-              Begin Setup
-            </Button>
-          </div>
-        ),
-        stepId: 'advanced-overview'
-      }
-    );
-  }, [addMessage]);
-
-  const proceedToAdvancedBasicInfo = useCallback(() => {
-    addSimpleMessage('Begin Setup', 'user');
-    markStepCompleted('advanced-overview');
-    setCurrentStep('adv-basic-info');
-    
-    schedule(() => {
-      const basicFields: FormField[] = [
-        {
-          id: 'companyName',
-          label: 'Company Name',
-          type: 'text',
-          required: true,
-          placeholder: 'e.g., CPS'
-        },
-        {
-          id: 'contactEmail',
-          label: 'Contact Email',
-          type: 'email',
-          required: true,
-          placeholder: 'e.g., client@example.com'
-        }
-      ];
-
-      const credentialsSection: FormSection = {
-        id: 'credentials',
-        title: 'Auto-Generated Credentials',
-        description: 'Secure login details will be auto-generated from your email',
-        fields: [
-          {
-            id: 'username',
-            label: 'Username',
-            type: 'text',
-            value: '',
-            required: false,
-            placeholder: 'Will be generated from email address'
-          },
-          {
-            id: 'tempPassword',
-            label: 'Temporary Password',
-            type: 'text',
-            value: '',
-            required: false,
-            placeholder: 'Will be auto-generated securely'
-          }
-        ]
-      };
-
-      addAgentResponse(
-        "Let's start with the client's basic details. I'll auto-generate secure credentials once you provide:",
-        <Form
-          kind="form"
-          title="Client Information"
-          description="Company Name and Contact Email (used for portal access)"
-          sections={[
-            {
-              id: 'basic',
-              fields: basicFields
-            },
-            credentialsSection
-          ]}
-          validations={[
-            { fieldId: 'companyName', rule: 'required', message: 'Company name is required' },
-            { fieldId: 'contactEmail', rule: 'required', message: 'Email is required' },
-            { fieldId: 'contactEmail', rule: 'regex', pattern: '^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$', message: 'Please enter a valid email' }
-          ]}
-          derive={[
-            {
-              fieldId: 'username',
-              from: ['contactEmail'],
-              strategy: 'usernameFromEmail',
-              editable: true
-            },
-            {
-              fieldId: 'tempPassword',
-              from: ['contactEmail'],
-              strategy: 'strongPassword',
-              editable: true
-            }
-          ]}
-          submitLabel="Continue to Delivery Method"
-          onSubmit={handleAdvancedBasicInfoSubmit}
-          onRequestDerive={handleDerive}
-          derivedValues={derivedValues}
-          disabled={completedSteps.has('adv-basic-info') && currentStep !== 'adv-basic-info'}
-          locked={completedSteps.has('adv-basic-info') && currentStep !== 'adv-basic-info'}
-        />,
-        undefined,
-        undefined,
-        'adv-basic-info'
-      );
-    }, 500);
-  }, [addSimpleMessage, markStepCompleted, addAgentResponse, completedSteps, currentStep, schedule, handleDerive, derivedValues]);
-
-  const handleAdvancedBasicInfoSubmit = useCallback((data: Record<string, any>) => {
-    const { companyName, contactEmail } = data;
-    addSimpleMessage(`Company: ${companyName}, Email: ${contactEmail}`, 'user');
-    
-    // Store client email for later use
-    console.log('📧 Setting clientEmail to:', contactEmail);
-    setClientEmail(contactEmail);
-    
-    clearDerivedValues();
-    markStepCompleted('adv-basic-info');
-    setCurrentStep('adv-delivery-method');
-    
-    schedule(() => {
-      addAgentResponse(
-        "Now, select how leads will be delivered to this client. You can skip this step and configure later if needed.",
-        <ChoiceList
-          kind="choices"
-          title="Choose Delivery Method"
-          options={DELIVERY_OPTIONS}
-          mode="single"
-          layout="card"
-          onChange={(value) => handleAdvancedDeliveryMethodSelect(value as string)}
-          disabled={completedSteps.has('adv-delivery-method') && currentStep !== 'adv-delivery-method'}
-          locked={completedSteps.has('adv-delivery-method') && currentStep !== 'adv-delivery-method'}
-        />,
-        undefined,
-        undefined,
-        'adv-delivery-method'
-      );
-    }, 500);
-  }, [addSimpleMessage, markStepCompleted, addAgentResponse, completedSteps, currentStep, schedule, clearDerivedValues]);
-
-  const handleAdvancedStatusSelect = useCallback((status: string) => {
-    addSimpleMessage(`Selected status: ${status}`, 'user');
-    markStepCompleted('adv-status-group');
-    setCurrentStep('adv-portal-access');
-    
-    schedule(() => {
-      // Generate credentials
-      const username = `client_${Date.now().toString(36)}`;
-      const tempPassword = `Temp${Math.random().toString(36).substr(2, 8)}!`;
-      
-      addAgentResponse(
-        `Portal access will be created automatically. Login details will be:\n\nUsername: ${username}\nTemporary Password: ${tempPassword}\n\n*Note: The client will need to change the password on first login.*`,
-        <Alert
-          kind="alert"
-          type="info"
-          title="Portal Credentials Generated"
-          message={`Username: ${username}\nPassword: ${tempPassword}\n\nThese credentials will be sent to the contact email.`}
-          disabled={completedSteps.has('adv-portal-access') && currentStep !== 'adv-portal-access'}
-          locked={completedSteps.has('adv-portal-access') && currentStep !== 'adv-portal-access'}
-        />,
-        [
-          {
-            id: 'continue-delivery',
-            label: 'Continue',
-            variant: 'default' as const,
-            icon: <ArrowRight className="w-4 h-4" />,
-            onClick: () => proceedToDeliveryDecision()
-          }
-        ],
-        undefined,
-        undefined,
-        'adv-portal-access'
-      );
-    }, 500);
-  }, [addSimpleMessage, markStepCompleted, addAgentResponse, schedule]);
-
-  const proceedToDeliveryDecision = useCallback(() => {
-    addSimpleMessage('Continue', 'user');
-    markStepCompleted('adv-portal-access');
-    setCurrentStep('adv-delivery-decision');
-    
-    schedule(() => {
-      const deliveryDecisionOptions = [
-        {
-          id: 'yes',
-          label: 'Yes - Complete full setup',
-          description: 'Configure delivery methods and lead settings now',
-          icon: 'Settings'
-        },
-        {
-          id: 'no',
-          label: 'No - Save client and configure later',
-          description: 'Create the client and set up delivery later',
-          icon: 'Save'
-        }
-      ];
-
-      addAgentResponse(
-        "Would you like to configure delivery settings now?",
-        <ChoiceList
-          kind="choices"
-          title="Configure Delivery Settings"
-          options={deliveryDecisionOptions}
-          mode="single"
-          layout="simple"
-          onChange={(value) => handleDeliveryDecision(value as string)}
-          disabled={completedSteps.has('adv-delivery-decision') && currentStep !== 'adv-delivery-decision'}
-          locked={completedSteps.has('adv-delivery-decision') && currentStep !== 'adv-delivery-decision'}
-        />,
-        undefined,
-        undefined,
-        'adv-delivery-decision'
-      );
-    }, 500);
-  }, [addSimpleMessage, markStepCompleted, addAgentResponse, completedSteps, currentStep, schedule]);
-
-  const handleDeliveryDecision = useCallback((decision: string) => {
-    addSimpleMessage(`${decision === 'yes' ? 'Yes - Complete full setup' : 'No - Save and configure later'}`, 'user');
-    markStepCompleted('adv-delivery-decision');
-    
-    if (decision === 'yes') {
-      // Continue with delivery configuration
-      setCurrentStep('adv-delivery-method');
-      
-      schedule(() => {
-        const deliveryMethods = [
-          { id: 'email', label: 'Email', description: 'Simple email delivery', icon: 'Mail' },
-          { id: 'webhook', label: 'HTTP Webhook/API', description: 'Real-time API integration', icon: 'Webhook' },
-          { id: 'ftp', label: 'FTP', description: 'File transfer protocol', icon: 'Database' },
-          { id: 'pingpost', label: 'Ping/Post', description: 'Two-step lead verification', icon: 'Zap' },
-          { id: 'portal', label: 'Portal Delivery', description: 'Client portal only', icon: 'Globe' }
-        ];
-
-        addAgentResponse(
-          "First, let's set up HOW leads will be delivered. What delivery method would you like to use?",
-          <ChoiceList
-            kind="choices"
-            title="Choose Delivery Method"
-            options={deliveryMethods}
-            mode="single"
-            layout="card"
-            onChange={(value) => handleAdvancedDeliveryMethodSelect(value as string)}
-            disabled={completedSteps.has('adv-delivery-method') && currentStep !== 'adv-delivery-method'}
-            locked={completedSteps.has('adv-delivery-method') && currentStep !== 'adv-delivery-method'}
-          />,
-          undefined,
-          undefined,
-          'adv-delivery-method'
-        );
-      }, 500);
-    } else {
-      // Skip to summary
-      proceedToAdvancedSummary(false);
-    }
-  }, [addSimpleMessage, markStepCompleted, addAgentResponse, completedSteps, currentStep, schedule]);
-
-  const handleAdvancedDeliveryMethodSelect = useCallback((method: string) => {
-    const methodLabel = DELIVERY_METHOD_LABELS[method] || method;
-    addSimpleMessage(`Selected: ${methodLabel}`, 'user');
-    markStepCompleted('delivery-method');
-    
-    if (method === 'skip') {
-      // Skip to review if they chose skip
-      proceedToAdvancedReview();
-      return;
-    }
-    
-    setCurrentStep('delivery-config');
-    
-    schedule(() => {
-      // Show different form based on delivery method
-      let configFields: FormField[] = [];
-      let configTitle = '';
-      let configDescription = '';
-      let suggestedActions: SuggestedAction[] | undefined = undefined;
-      
-      if (method === 'email') {
-        configTitle = 'Email Delivery Configuration';
-        configDescription = 'Set up email delivery details';
-        configFields = [
-          { id: 'recipientEmail', label: 'Recipient Email Address', type: 'email', required: true, placeholder: 'client@example.com' },
-          { id: 'format', label: 'Email Format', type: 'select', required: true, value: 'html', options: [
-            { value: 'html', label: 'HTML Format' },
-            { value: 'text', label: 'Plain Text' }
-          ]},
-          { id: 'frequency', label: 'Send Frequency', type: 'select', required: true, value: 'realtime', options: [
-            { value: 'realtime', label: 'Real-time' },
-            { value: 'batch', label: 'Batch (hourly)' }
-          ]}
-        ];
-      } else if (method === 'webhook') {
-        configTitle = 'Webhook Configuration';
-        configDescription = 'Set up real-time API delivery with testing';
-        configFields = [
-          { id: 'endpointUrl', label: 'Endpoint URL', type: 'url', required: true, placeholder: 'https://api.example.com/leads' },
-          { id: 'authMethod', label: 'Authentication Method', type: 'select', required: true, value: 'apikey', options: [
-            { value: 'apikey', label: 'API Key' },
-            { value: 'basic', label: 'Basic Auth' },
-            { value: 'none', label: 'No Authentication' }
-          ]},
-          { id: 'apiKey', label: 'API Key', type: 'text', placeholder: 'Enter your API key (if applicable)' }
-        ];
-        suggestedActions = [
-          {
-            id: 'test-connection',
-            label: 'Test Connection',
-            variant: 'outline' as const,
-            icon: <ExternalLink className="w-4 h-4" />,
-            onClick: () => handleTestConnection()
-          }
-        ];
-      } else if (method === 'ftp') {
-        configTitle = 'FTP Configuration';
-        configDescription = 'Set up file transfer protocol delivery';
-        configFields = [
-          { id: 'ftpHost', label: 'FTP Host', type: 'text', required: true, placeholder: 'ftp.example.com' },
-          { id: 'ftpUsername', label: 'FTP Username', type: 'text', required: true },
-          { id: 'ftpPassword', label: 'FTP Password', type: 'password', required: true },
-          { id: 'ftpPath', label: 'Upload Directory', type: 'text', placeholder: '/leads/' }
-        ];
-      }
-      
-      addAgentResponse(
-        method === 'webhook' 
-          ? `Great! Let's configure the webhook. You'll be able to test the connection before we proceed.`
-          : `Let's configure ${methodLabel.toLowerCase()} for this client:`,
-        <Form
-          kind="form"
-          title={configTitle}
-          description={configDescription}
-          fields={configFields}
-          submitLabel="Save Configuration"
-          onSubmit={(data) => handleAdvancedDeliveryConfigSubmit(method, data)}
-          disabled={completedSteps.has('delivery-config') && currentStep !== 'delivery-config'}
-          locked={completedSteps.has('delivery-config') && currentStep !== 'delivery-config'}
-        />,
-        suggestedActions,
-        undefined,
-        'delivery-config'
-      );
-    }, 500);
-  }, [addSimpleMessage, markStepCompleted, addAgentResponse, completedSteps, currentStep, schedule]);
-
-  const handleTestConnection = useCallback(() => {
-    addSimpleMessage('Test connection', 'user');
-    
-    // Simulate test connection
-    addProcessingMessage('Testing webhook connection...');
-    
-    schedule(() => {
-      addAgentResponse(
-        '✅ Connection test successful! The webhook endpoint responded correctly. You can now save this configuration.',
-        <Alert
-          kind="alert"
-          type="success"
-          title="Connection Test Passed"
-          message="The webhook endpoint is reachable and responded with a 200 OK status. The connection is ready for lead delivery."
-        />
-      );
-    }, 1500);
-  }, [addSimpleMessage, addProcessingMessage, addAgentResponse, schedule]);
-
-  const handleAdvancedDeliveryConfigSubmit = useCallback((method: string, config: Record<string, any>) => {
-    addSimpleMessage('Save Configuration', 'user');
-    markStepCompleted('delivery-config');
-    
-    // Proceed to review
-    proceedToAdvancedReview();
-  }, [addSimpleMessage, markStepCompleted]);
-
-  const proceedToAdvancedReview = useCallback(() => {
-    setCurrentStep('review');
-    
-    schedule(() => {
-      // Review summary with all configured settings
-      const reviewSections: FormSection[] = [
-        {
-          id: 'client-info',
-          title: 'Client Information',
-          fields: [
-            { id: 'companyName', label: 'Company Name', type: 'text', value: 'CPS', disabled: true },
-            { id: 'contactEmail', label: 'Contact Email', type: 'email', value: 'client@cps.com', disabled: true }
-          ]
-        },
-        {
-          id: 'credentials',
-          title: 'Portal Credentials',
-          fields: [
-            { id: 'username', label: 'Username', type: 'text', value: 'cps_client', disabled: true },
-            { id: 'password', label: 'Temporary Password', type: 'text', value: 'Temp123!@#', disabled: true }
-          ]
-        },
-        {
-          id: 'delivery',
-          title: 'Delivery Configuration',
-          fields: [
-            { id: 'method', label: 'Delivery Method', type: 'text', value: 'Webhook', disabled: true },
-            { id: 'status', label: 'Status', type: 'text', value: 'Configured', disabled: true }
-          ]
-        }
-      ];
-      
-      const activationOptions = [
-        {
-          id: 'activate',
-          label: 'Activate Now',
-          description: 'Client will be active and can receive leads immediately',
-          icon: 'CheckCircle'
-        },
-        {
-          id: 'pending',
-          label: 'Keep as Pending',
-          description: 'Client will be created but inactive until manually activated',
-          icon: 'Clock'
-        },
-        {
-          id: 'edit',
-          label: 'Edit Configuration',
-          description: 'Go back and modify settings before saving',
-          icon: 'Edit'
-        }
-      ];
-      
-      addAgentResponse(
-        "Perfect! Here's a summary of the client configuration. Choose how you'd like to proceed:",
-        <div className="space-y-6">
-          <Form
-            kind="form"
-            title="Review Client Configuration"
-            description="Verify all settings before creating the client"
-            sections={reviewSections}
-            submitLabel=""
-            disabled={true}
-            locked={completedSteps.has('review') && currentStep !== 'review'}
-          />
-          <ChoiceList
-            kind="choices"
-            title="Activation Options"
-            options={activationOptions}
-            mode="single"
-            layout="simple"
-            onChange={(value) => handleAdvancedActivationChoice(value as string)}
-            disabled={completedSteps.has('review') && currentStep !== 'review'}
-            locked={completedSteps.has('review') && currentStep !== 'review'}
-          />
-        </div>,
-        undefined,
-        undefined,
-        'review'
-      );
-    }, 500);
-  }, [addAgentResponse, completedSteps, currentStep, schedule]);
-
-  const handleAdvancedActivationChoice = useCallback((choice: string) => {
-    if (choice === 'edit') {
-      addSimpleMessage('Edit Configuration', 'user');
-      // Reset to basic info step
-      setCurrentStep('basic-info');
-      setCompletedSteps(new Set());
-      proceedToAdvancedBasicInfo();
-      return;
-    }
-    
-    const choiceLabel = choice === 'activate' ? 'Activate Now' : 'Keep as Pending';
-    addSimpleMessage(choiceLabel, 'user');
-    markStepCompleted('review');
-    
-    // Create success message
-    addProcessingMessage('Creating client in LeadExec...');
-    
-    schedule(() => {
-      const status = choice === 'activate' ? 'Active' : 'Pending';
-      
-      addAgentResponse(
-        `✅ Client successfully created! The client is now ${status.toLowerCase()} in LeadExec.`,
-        <SummaryCard
-          kind="summary"
-          title="Client Created Successfully"
-          status={choice === 'activate' ? 'success' : 'info'}
-          items={[
-            { label: 'Company', value: 'CPS' },
-            { label: 'Status', value: status },
-            { label: 'Portal Access', value: 'Enabled' },
-            { label: 'Delivery Method', value: 'Configured' },
-            { label: 'Client ID', value: 'CL-2024-0042' }
-          ]}
-        />,
-        [
-          {
-            id: 'view-client',
-            label: 'View Client Details',
-            variant: 'default' as const,
-            icon: <ExternalLink className="w-4 h-4" />,
-            onClick: () => addSimpleMessage('View client details', 'user')
-          },
-          {
-            id: 'create-another',
-            label: 'Create Another Client',
-            variant: 'outline' as const,
-            icon: <Plus className="w-4 h-4" />,
-            onClick: () => handleToolSelection('create-new-client')
-          },
-          {
-            id: 'back-to-tools',
-            label: 'Back to Tools',
-            variant: 'ghost' as const,
-            icon: <Home className="w-4 h-4" />,
-            onClick: () => handleStartOver()
-          }
-        ]
-      );
-      
-      // Mark flow as complete
-      setFlowActive(false);
-    }, 1500);
-  }, [addSimpleMessage, markStepCompleted, addProcessingMessage, addAgentResponse, schedule, handleToolSelection, handleStartOver]);
-
-  // ===== DRAFT CLIENT SETUP FLOW =====
-  const handleClientSetupDraft = useCallback(() => {
-    addMessage(
-      'I\'ll guide you through the LeadExec client setup process. Here\'s what we\'ll accomplish together:',
-      'assistant',
-      {
-        component: (
-          <div className="space-y-4">
-            <Steps
-              kind="steps"
-              variant="overview"
-              steps={CLIENT_SETUP_STEPS}
-              title="Client Setup Process (Draft)"
-              showIndex={true}
-              locked={false}
-            />
-            <Button 
-              onClick={() => proceedToBasicInfoDraft()} 
-              className="gap-2 font-medium"
-              disabled={false}
-            >
-              <ArrowRight className="w-4 h-4" />
-              Start Setup
-            </Button>
-          </div>
-        ),
-        stepId: 'setup-overview'
-      }
-    );
-  }, [addMessage]);
-
-  const proceedToBasicInfoDraft = useCallback(() => {
     addSimpleMessage('Start Setup', 'user');
     
     // Mark setup overview as completed
@@ -1680,11 +583,11 @@ export function ConversationalChat({
             }
           ]}
           submitLabel="Continue"
-          onSubmit={handleBasicInfoSubmitDraft}
+          onSubmit={handleBasicInfoSubmit}
           onRequestDerive={handleDerive}
           derivedValues={derivedValues}
-          disabled={completedSteps.has('basic-info') && currentStep !== 'basic-info'}
-          locked={completedSteps.has('basic-info') && currentStep !== 'basic-info'}
+          disabled={shouldLockStep('basic-info')}
+          locked={shouldLockStep('basic-info')}
         />,
         undefined,
         undefined,
@@ -1693,7 +596,7 @@ export function ConversationalChat({
     }, 500);
   }, [addSimpleMessage, markStepCompleted, addAgentResponse, completedSteps, currentStep, schedule, handleDerive, derivedValues, clearDerivedValues]);
 
-  const handleBasicInfoSubmitDraft = useCallback((data: Record<string, any>) => {
+  const handleBasicInfoSubmit = useCallback((data: Record<string, any>) => {
     const { companyName, email, username, tempPassword } = data;
     addSimpleMessage(`${companyName} (${email})`, 'user');
     
@@ -1715,9 +618,9 @@ export function ConversationalChat({
           options={DELIVERY_OPTIONS}
           mode="single"
           layout="card"
-          onChange={(value) => handleDeliveryMethodSelectDraft(value as string)}
-          disabled={completedSteps.has('delivery-method') && currentStep !== 'delivery-method'}
-          locked={completedSteps.has('delivery-method') && currentStep !== 'delivery-method'}
+          onChange={(value) => handleDeliveryMethodSelect(value as string)}
+          disabled={shouldLockStep('delivery-method')}
+          locked={shouldLockStep('delivery-method')}
         />,
         undefined,
         undefined,
@@ -1726,7 +629,7 @@ export function ConversationalChat({
     }, 500);
   }, [addSimpleMessage, markStepCompleted, addAgentResponse, completedSteps, currentStep, schedule, clearDerivedValues]);
 
-  const handleDeliveryMethodSelectDraft = useCallback((method: string) => {
+  const handleDeliveryMethodSelect = useCallback((method: string) => {
     addSimpleMessage(`Selected: ${DELIVERY_METHOD_LABELS[method] || method}`, 'user');
     
     // Mark delivery method step as completed
@@ -1757,9 +660,9 @@ export function ConversationalChat({
             ]}
             mode="single"
             layout="card"
-            onChange={(value) => handleFieldMappingChoiceDraft(value as string)}
-            disabled={completedSteps.has('field-mapping') && currentStep !== 'field-mapping'}
-            locked={completedSteps.has('field-mapping') && currentStep !== 'field-mapping'}
+            onChange={(value) => handleFieldMappingChoice(value as string)}
+            disabled={shouldLockStep('field-mapping')}
+            locked={shouldLockStep('field-mapping')}
           />,
           undefined,
           undefined,
@@ -1816,9 +719,9 @@ export function ConversationalChat({
                   }
                 ]}
                 submitLabel="Continue"
-                onSubmit={handleWebhookBasicConfigSubmitDraft}
-                disabled={completedSteps.has('webhook-basic') && currentStep !== 'webhook-basic'}
-                locked={completedSteps.has('webhook-basic') && currentStep !== 'webhook-basic'}
+                onSubmit={handleWebhookBasicConfigSubmit}
+                disabled={shouldLockStep('webhook-basic')}
+                locked={shouldLockStep('webhook-basic')}
               />
             ),
             stepId: 'webhook-basic'
@@ -1840,7 +743,7 @@ export function ConversationalChat({
                   maxSizeMb={5}
                 />
                 <div className="flex gap-3">
-                  <Button onClick={() => handleDeliveryConfigSubmitDraft({ useDefault: true })} className="font-medium">
+                  <Button onClick={() => handleDeliveryConfigSubmit({ useDefault: true })} className="font-medium">
                     Continue
                   </Button>
                 </div>
@@ -1896,9 +799,9 @@ export function ConversationalChat({
                   }
                 ]}
                 submitLabel="Continue to Configuration"
-                onSubmit={handleDeliveryConfigSubmitDraft}
-                disabled={completedSteps.has('delivery-config') && currentStep !== 'delivery-config'}
-                locked={completedSteps.has('delivery-config') && currentStep !== 'delivery-config'}
+                onSubmit={handleDeliveryConfigSubmit}
+                disabled={shouldLockStep('delivery-config')}
+                locked={shouldLockStep('delivery-config')}
               />
             ),
             stepId: 'delivery-config'
@@ -1906,12 +809,12 @@ export function ConversationalChat({
         );
       } else {
         // Skip delivery configuration
-        handleDeliveryConfigSubmitDraft({ skipped: true });
+        handleDeliveryConfigSubmit({ skipped: true });
       }
     }, 500);
   }, [addMessage, markStepCompleted, completedSteps, currentStep, schedule]);
 
-  const handleFieldMappingChoiceDraft = useCallback((choice: string) => {
+  const handleFieldMappingChoice = useCallback((choice: string) => {
     addSimpleMessage(choice === 'all' ? 'Use All Lead Fields' : 'Exclude Some Fields', 'user');
     markStepCompleted('field-mapping');
     setCurrentStep('template-choice');
@@ -1938,7 +841,7 @@ export function ConversationalChat({
                   }
                 ]}
                 submitLabel="Continue"
-                onSubmit={() => handleFieldExclusionSubmitDraft()}
+                onSubmit={() => handleFieldExclusionSubmit()}
               />
             ),
             stepId: 'field-exclusions'
@@ -1946,17 +849,17 @@ export function ConversationalChat({
         );
       } else {
         // Skip to template question
-        handleTemplateQuestionDraft();
+        handleTemplateQuestion();
       }
     }, 500);
-  }, [addSimpleMessage, markStepCompleted, addMessage, schedule]);
+  }, [addSimpleMessage, markStepCompleted, addMessage, schedule, shouldLockStep]);
 
-  const handleFieldExclusionSubmitDraft = useCallback(() => {
+  const handleFieldExclusionSubmit = useCallback(() => {
     addSimpleMessage('Field exclusions saved', 'user');
-    handleTemplateQuestionDraft();
+    handleTemplateQuestion();
   }, [addSimpleMessage]);
 
-  const handleTemplateQuestionDraft = useCallback(() => {
+  const handleTemplateQuestion = useCallback(() => {
     schedule(() => {
       addAgentResponse(
         'Would you like to use a generic email template or upload a custom one?',
@@ -1978,9 +881,9 @@ export function ConversationalChat({
           ]}
           mode="single"
           layout="card"
-          onChange={(value) => handleTemplateChoiceDraft(value as string)}
-          disabled={completedSteps.has('template-choice') && currentStep !== 'template-choice'}
-          locked={completedSteps.has('template-choice') && currentStep !== 'template-choice'}
+          onChange={(value) => handleTemplateChoice(value as string)}
+          disabled={shouldLockStep('template-choice')}
+          locked={shouldLockStep('template-choice')}
         />,
         undefined,
         undefined,
@@ -1989,7 +892,7 @@ export function ConversationalChat({
     }, 500);
   }, [addAgentResponse, completedSteps, currentStep, schedule]);
 
-  const handleTemplateChoiceDraft = useCallback((choice: string) => {
+  const handleTemplateChoice = useCallback((choice: string) => {
     addSimpleMessage(choice === 'generic' ? 'Generic Template' : 'Custom Template', 'user');
     markStepCompleted('template-choice');
     setCurrentStep('schedule-question');
@@ -2018,15 +921,15 @@ export function ConversationalChat({
         // Auto-continue after upload simulation
         schedule(() => {
           addSimpleMessage('Template uploaded', 'user');
-          handleScheduleQuestionDraft();
+          handleScheduleQuestion();
         }, 2000);
       } else {
-        handleScheduleQuestionDraft();
+        handleScheduleQuestion();
       }
     }, 500);
-  }, [addSimpleMessage, markStepCompleted, addMessage, schedule]);
+  }, [addSimpleMessage, markStepCompleted, addMessage, schedule, shouldLockStep]);
 
-  const handleScheduleQuestionDraft = useCallback(() => {
+  const handleScheduleQuestion = useCallback(() => {
     schedule(() => {
       addAgentResponse(
         'Should this delivery method follow a delivery schedule?',
@@ -2048,9 +951,9 @@ export function ConversationalChat({
           ]}
           mode="single"
           layout="card"
-          onChange={(value) => handleScheduleChoiceDraft(value as string)}
-          disabled={completedSteps.has('schedule-question') && currentStep !== 'schedule-question'}
-          locked={completedSteps.has('schedule-question') && currentStep !== 'schedule-question'}
+          onChange={(value) => handleScheduleChoice(value as string)}
+          disabled={shouldLockStep('schedule-question')}
+          locked={shouldLockStep('schedule-question')}
         />,
         undefined,
         undefined,
@@ -2059,7 +962,7 @@ export function ConversationalChat({
     }, 500);
   }, [addAgentResponse, completedSteps, currentStep, schedule]);
 
-  const handleScheduleChoiceDraft = useCallback((choice: string) => {
+  const handleScheduleChoice = useCallback((choice: string) => {
     addSimpleMessage(choice === 'yes' ? 'Yes, Set Schedule' : 'No, Deliver Immediately', 'user');
     markStepCompleted('schedule-question');
     setCurrentStep(choice === 'yes' ? 'schedule-details' : 'retry-question');
@@ -2086,25 +989,28 @@ export function ConversationalChat({
                   }
                 ]}
                 submitLabel="Continue"
-                onSubmit={() => handleScheduleDetailsSubmitDraft()}
+                onSubmit={() => handleScheduleDetailsSubmit()}
+                disabled={false}
+                locked={false}
               />
             ),
             stepId: 'schedule-details'
           }
         );
       } else {
-        handleRetryQuestionDraft();
+        handleRetryQuestion();
       }
     }, 500);
-  }, [addSimpleMessage, markStepCompleted, addMessage, schedule]);
+  }, [addSimpleMessage, markStepCompleted, addMessage, schedule, shouldLockStep]);
 
-  const handleScheduleDetailsSubmitDraft = useCallback(() => {
+  const handleScheduleDetailsSubmit = useCallback(() => {
     addSimpleMessage('Schedule details saved', 'user');
     markStepCompleted('schedule-details');
-    handleRetryQuestionDraft();
-  }, [addSimpleMessage, markStepCompleted]);
+    setCurrentStep('retry-question');
+    handleRetryQuestion();
+  }, [addSimpleMessage, markStepCompleted, setCurrentStep]);
 
-  const handleRetryQuestionDraft = useCallback(() => {
+  const handleRetryQuestion = useCallback(() => {
     schedule(() => {
       addAgentResponse(
         'Should there be retry logic if delivery fails?',
@@ -2126,9 +1032,9 @@ export function ConversationalChat({
           ]}
           mode="single"
           layout="card"
-          onChange={(value) => handleRetryChoiceDraft(value as string)}
-          disabled={completedSteps.has('retry-question') && currentStep !== 'retry-question'}
-          locked={completedSteps.has('retry-question') && currentStep !== 'retry-question'}
+          onChange={(value) => handleRetryChoice(value as string)}
+          disabled={shouldLockStep('retry-question')}
+          locked={shouldLockStep('retry-question')}
         />,
         undefined,
         undefined,
@@ -2137,7 +1043,7 @@ export function ConversationalChat({
     }, 500);
   }, [addAgentResponse, completedSteps, currentStep, schedule]);
 
-  const handleRetryChoiceDraft = useCallback((choice: string) => {
+  const handleRetryChoice = useCallback((choice: string) => {
     addSimpleMessage(choice === 'yes' ? 'Yes, Enable Retry' : 'No, Single Attempt', 'user');
     markStepCompleted('retry-question');
     setCurrentStep(choice === 'yes' ? 'retry-details' : 'notification-question');
@@ -2175,25 +1081,28 @@ export function ConversationalChat({
                   }
                 ]}
                 submitLabel="Continue"
-                onSubmit={() => handleRetryDetailsSubmitDraft()}
+                onSubmit={() => handleRetryDetailsSubmit()}
+                disabled={false}
+                locked={false}
               />
             ),
             stepId: 'retry-details'
           }
         );
       } else {
-        handleNotificationQuestionDraft();
+        handleNotificationQuestion();
       }
     }, 500);
-  }, [addSimpleMessage, markStepCompleted, addMessage, schedule]);
+  }, [addSimpleMessage, markStepCompleted, addMessage, schedule, shouldLockStep]);
 
-  const handleRetryDetailsSubmitDraft = useCallback(() => {
+  const handleRetryDetailsSubmit = useCallback(() => {
     addSimpleMessage('Retry settings saved', 'user');
     markStepCompleted('retry-details');
-    handleNotificationQuestionDraft();
-  }, [addSimpleMessage, markStepCompleted]);
+    setCurrentStep('notification-question');
+    handleNotificationQuestion();
+  }, [addSimpleMessage, markStepCompleted, setCurrentStep]);
 
-  const handleNotificationQuestionDraft = useCallback(() => {
+  const handleNotificationQuestion = useCallback(() => {
     schedule(() => {
       addAgentResponse(
         'Should we notify the account owner on delivery failures?',
@@ -2215,9 +1124,9 @@ export function ConversationalChat({
           ]}
           mode="single"
           layout="card"
-          onChange={(value) => handleNotificationChoiceDraft(value as string)}
-          disabled={completedSteps.has('notification-question') && currentStep !== 'notification-question'}
-          locked={completedSteps.has('notification-question') && currentStep !== 'notification-question'}
+          onChange={(value) => handleNotificationChoice(value as string)}
+          disabled={shouldLockStep('notification-question')}
+          locked={shouldLockStep('notification-question')}
         />,
         undefined,
         undefined,
@@ -2226,22 +1135,26 @@ export function ConversationalChat({
     }, 500);
   }, [addAgentResponse, completedSteps, currentStep, schedule]);
 
-  const handleNotificationChoiceDraft = useCallback((choice: string) => {
+  const handleNotificationChoice = useCallback((choice: string) => {
     addSimpleMessage(choice === 'yes' ? 'Yes, Send Notifications' : 'No Notifications', 'user');
     markStepCompleted('notification-question');
     setCurrentStep(choice === 'yes' ? 'notification-details' : 'delivery-summary');
     
     if (choice === 'yes') {
-      // Ask for notification recipient - use current clientEmail state
+      // Capture the current clientEmail value before scheduling
+      const emailForForm = clientEmail;
+      console.log('🔍 Captured clientEmail for notification form:', emailForForm);
+      
+      // Ask for notification recipient
       schedule(() => {
-        console.log('🔍 Creating notification form with clientEmail:', clientEmail);
+        console.log('📧 Creating notification form with captured email:', emailForForm);
         addMessage(
           'Who should receive the failure notifications?',
           'assistant',
           {
             component: (
               <Form
-                key={`notification-form-${clientEmail || 'empty'}`}
+                key={`notification-form-${emailForForm || 'empty'}`}
                 kind="form"
                 title="Notification Recipient"
                 description="Email address for delivery failure alerts"
@@ -2250,8 +1163,8 @@ export function ConversationalChat({
                     id: 'notificationEmail',
                     label: 'Notification Email',
                     type: 'email' as const,
-                    placeholder: clientEmail || 'admin@company.com',
-                    value: clientEmail || '',
+                    placeholder: emailForForm || 'admin@company.com',
+                    value: emailForForm || '',
                     required: true
                   }
                 ]}
@@ -2265,8 +1178,10 @@ export function ConversationalChat({
                 submitLabel="Continue"
                 onSubmit={(data) => {
                   console.log('📧 Notification form submitted with:', data);
-                  handleNotificationDetailsSubmitDraft();
+                  handleNotificationDetailsSubmit();
                 }}
+                disabled={false}
+                locked={false}
               />
             ),
             stepId: 'notification-details'
@@ -2301,13 +1216,13 @@ export function ConversationalChat({
               layout="card"
               onChange={(value) => {
                 if (value === 'yes') {
-                  handleDeliveryAccountSetupDraft();
+                  handleDeliveryAccountSetup();
                 } else {
-                  handleSkipDeliveryAccountDraft();
+                  handleSkipDeliveryAccount();
                 }
               }}
-              disabled={completedSteps.has('delivery-account-choice') && currentStep !== 'delivery-account-choice'}
-              locked={completedSteps.has('delivery-account-choice') && currentStep !== 'delivery-account-choice'}
+              disabled={false}
+              locked={false}
             />,
             undefined,
             undefined,
@@ -2317,7 +1232,7 @@ export function ConversationalChat({
     }
   }, [addSimpleMessage, markStepCompleted, addMessage, schedule, clientEmail]);
 
-  const handleWebhookBasicConfigSubmitDraft = useCallback((config: Record<string, any>) => {
+  const handleWebhookBasicConfigSubmit = useCallback((config: Record<string, any>) => {
     addSimpleMessage('Webhook details saved', 'user');
     markStepCompleted('webhook-basic');
     setCurrentStep('webhook-field-mapping');
@@ -2343,9 +1258,9 @@ export function ConversationalChat({
           ]}
           mode="single"
           layout="card"
-          onChange={(value) => handleWebhookFieldMappingChoiceDraft(value as string)}
-          disabled={completedSteps.has('webhook-field-mapping') && currentStep !== 'webhook-field-mapping'}
-          locked={completedSteps.has('webhook-field-mapping') && currentStep !== 'webhook-field-mapping'}
+          onChange={(value) => handleWebhookFieldMappingChoice(value as string)}
+          disabled={shouldLockStep('webhook-field-mapping')}
+          locked={shouldLockStep('webhook-field-mapping')}
         />,
         undefined,
         undefined,
@@ -2354,7 +1269,7 @@ export function ConversationalChat({
     }, 500);
   }, [addSimpleMessage, markStepCompleted, addAgentResponse, completedSteps, currentStep, schedule]);
 
-  const handleWebhookFieldMappingChoiceDraft = useCallback((choice: string) => {
+  const handleWebhookFieldMappingChoice = useCallback((choice: string) => {
     addSimpleMessage(choice === 'yes' ? 'Yes, Need Mapping' : 'No, Use Default', 'user');
     markStepCompleted('webhook-field-mapping');
     setCurrentStep('webhook-mapping-details');
@@ -2376,10 +1291,10 @@ export function ConversationalChat({
                   maxSizeMb={5}
                 />
                 <div className="flex gap-3">
-                  <Button onClick={() => handleWebhookMappingSubmitDraft()} className="font-medium">
+                  <Button onClick={() => handleWebhookMappingSubmit()} className="font-medium">
                     Auto-Map
                   </Button>
-                  <Button variant="outline" onClick={() => handleWebhookMappingSubmitDraft()} className="font-medium">
+                  <Button variant="outline" onClick={() => handleWebhookMappingSubmit()} className="font-medium">
                     Skip For Now
                   </Button>
                 </div>
@@ -2389,20 +1304,21 @@ export function ConversationalChat({
           }
         );
       } else {
-        handleWebhookMappingSubmitDraft();
+        handleWebhookMappingSubmit();
       }
     }, 500);
-  }, [addSimpleMessage, markStepCompleted, addMessage, schedule]);
+  }, [addSimpleMessage, markStepCompleted, addMessage, schedule, shouldLockStep]);
 
-  const handleWebhookMappingSubmitDraft = useCallback(() => {
+  const handleWebhookMappingSubmit = useCallback(() => {
     addSimpleMessage('Field mapping configured', 'user');
     markStepCompleted('webhook-mapping-details');
+    setCurrentStep('schedule-question');
     
     // Continue to schedule question (same as email flow)
-    handleScheduleQuestionDraft();
-  }, [addSimpleMessage, markStepCompleted]);
+    handleScheduleQuestion();
+  }, [addSimpleMessage, markStepCompleted, setCurrentStep]);
 
-  const handleNotificationDetailsSubmitDraft = useCallback(() => {
+  const handleNotificationDetailsSubmit = useCallback(() => {
     addSimpleMessage('Notification settings saved', 'user');
     markStepCompleted('notification-details');
     // Skip pointless summary, go directly to delivery account question
@@ -2432,13 +1348,13 @@ export function ConversationalChat({
           layout="card"
           onChange={(value) => {
             if (value === 'yes') {
-              handleDeliveryAccountSetupDraft();
+              handleDeliveryAccountSetup();
             } else {
-              handleSkipDeliveryAccountDraft();
+              handleSkipDeliveryAccount();
             }
           }}
-          disabled={completedSteps.has('delivery-account-choice') && currentStep !== 'delivery-account-choice'}
-          locked={completedSteps.has('delivery-account-choice') && currentStep !== 'delivery-account-choice'}
+          disabled={shouldLockStep('delivery-account-choice')}
+          locked={shouldLockStep('delivery-account-choice')}
         />,
         undefined,
         undefined,
@@ -2447,7 +1363,7 @@ export function ConversationalChat({
     }, 500);
   }, [addSimpleMessage, markStepCompleted, addAgentResponse, completedSteps, currentStep, schedule]);
 
-  const handleDeliveryConfigSubmitDraft = useCallback((config: Record<string, any>) => {
+  const handleDeliveryConfigSubmit = useCallback((config: Record<string, any>) => {
     console.log('🔧 handleDeliveryConfigSubmitDraft called with config:', config);
     addSimpleMessage('Delivery configuration saved', 'user');
     
@@ -2520,14 +1436,15 @@ export function ConversationalChat({
               validations={[
                 {
                   fieldId: 'notificationEmail',
-                  rule: 'email' as const,
+                  rule: 'regex' as const,
+                  pattern: '^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$',
                   message: 'Please enter a valid email address'
                 }
               ]}
               submitLabel="Continue to Delivery Account"
-              onSubmit={handleConfigurationSubmitDraft}
-              disabled={completedSteps.has('configuration') && currentStep !== 'configuration'}
-              locked={completedSteps.has('configuration') && currentStep !== 'configuration'}
+              onSubmit={handleConfigurationSubmit}
+              disabled={shouldLockStep('configuration')}
+              locked={shouldLockStep('configuration')}
             />
           ),
           stepId: 'configuration'
@@ -2536,7 +1453,7 @@ export function ConversationalChat({
     }, 500);
   }, [addMessage, markStepCompleted, completedSteps, currentStep, schedule]);
 
-  const handleConfigurationSubmitDraft = useCallback((configData: Record<string, any>) => {
+  const handleConfigurationSubmit = useCallback((configData: Record<string, any>) => {
     addSimpleMessage('Delivery settings saved', 'user');
     markStepCompleted('configuration');
     setCurrentStep('delivery-account-choice');
@@ -2565,13 +1482,13 @@ export function ConversationalChat({
           layout="card"
           onChange={(value) => {
             if (value === 'yes') {
-              handleDeliveryAccountSetupDraft();
+              handleDeliveryAccountSetup();
             } else {
-              handleSkipDeliveryAccountDraft();
+              handleSkipDeliveryAccount();
             }
           }}
-          disabled={completedSteps.has('delivery-account-choice') && currentStep !== 'delivery-account-choice'}
-          locked={completedSteps.has('delivery-account-choice') && currentStep !== 'delivery-account-choice'}
+          disabled={shouldLockStep('delivery-account-choice')}
+          locked={shouldLockStep('delivery-account-choice')}
         />,
         undefined,
         undefined,
@@ -2580,7 +1497,7 @@ export function ConversationalChat({
     }, 500);
   }, [addSimpleMessage, markStepCompleted, addAgentResponse, currentStep, schedule]);
 
-  const handleDeliveryAccountSetupDraft = useCallback(() => {
+  const handleDeliveryAccountSetup = useCallback(() => {
     addSimpleMessage('Yes, Create Delivery Account', 'user');
     markStepCompleted('delivery-account-choice');
     setCurrentStep('quantity-limits-question');
@@ -2607,9 +1524,9 @@ export function ConversationalChat({
           ]}
           mode="single"
           layout="card"
-          onChange={(value) => handleQuantityLimitsChoiceDraft(value as string)}
-          disabled={completedSteps.has('quantity-limits-question') && currentStep !== 'quantity-limits-question'}
-          locked={completedSteps.has('quantity-limits-question') && currentStep !== 'quantity-limits-question'}
+          onChange={(value) => handleQuantityLimitsChoice(value as string)}
+          disabled={shouldLockStep('quantity-limits-question')}
+          locked={shouldLockStep('quantity-limits-question')}
         />,
         undefined,
         undefined,
@@ -2618,7 +1535,7 @@ export function ConversationalChat({
     }, 500);
   }, [addAgentResponse, markStepCompleted, completedSteps, currentStep, schedule]);
 
-  const handleQuantityLimitsChoiceDraft = useCallback((choice: string) => {
+  const handleQuantityLimitsChoice = useCallback((choice: string) => {
     addSimpleMessage(choice === 'yes' ? 'Yes, Set Limits' : 'No Limits', 'user');
     markStepCompleted('quantity-limits-question');
     setCurrentStep(choice === 'yes' ? 'quantity-limits-details' : 'exclusive-delivery-question');
@@ -2667,25 +1584,28 @@ export function ConversationalChat({
                   }
                 ]}
                 submitLabel="Continue"
-                onSubmit={() => handleQuantityLimitsSubmitDraft()}
+                onSubmit={() => handleQuantityLimitsSubmit()}
+                disabled={false}
+                locked={false}
               />
             ),
             stepId: 'quantity-limits-details'
           }
         );
       } else {
-        handleExclusiveDeliveryQuestionDraft();
+        handleExclusiveDeliveryQuestion();
       }
     }, 500);
-  }, [addSimpleMessage, markStepCompleted, addMessage, schedule]);
+  }, [addSimpleMessage, markStepCompleted, addMessage, schedule, shouldLockStep]);
 
-  const handleQuantityLimitsSubmitDraft = useCallback(() => {
+  const handleQuantityLimitsSubmit = useCallback(() => {
     addSimpleMessage('Quantity limits saved', 'user');
     markStepCompleted('quantity-limits-details');
-    handleExclusiveDeliveryQuestionDraft();
-  }, [addSimpleMessage, markStepCompleted]);
+    setCurrentStep('exclusive-delivery-question');
+    handleExclusiveDeliveryQuestion();
+  }, [addSimpleMessage, markStepCompleted, setCurrentStep]);
 
-  const handleExclusiveDeliveryQuestionDraft = useCallback(() => {
+  const handleExclusiveDeliveryQuestion = useCallback(() => {
     schedule(() => {
       addAgentResponse(
         'Should this be an exclusive delivery?',
@@ -2707,9 +1627,9 @@ export function ConversationalChat({
           ]}
           mode="single"
           layout="card"
-          onChange={(value) => handleExclusiveDeliveryChoiceDraft(value as string)}
-          disabled={completedSteps.has('exclusive-delivery-question') && currentStep !== 'exclusive-delivery-question'}
-          locked={completedSteps.has('exclusive-delivery-question') && currentStep !== 'exclusive-delivery-question'}
+          onChange={(value) => handleExclusiveDeliveryChoice(value as string)}
+          disabled={shouldLockStep('exclusive-delivery-question')}
+          locked={shouldLockStep('exclusive-delivery-question')}
         />,
         undefined,
         undefined,
@@ -2718,7 +1638,7 @@ export function ConversationalChat({
     }, 500);
   }, [addAgentResponse, completedSteps, currentStep, schedule]);
 
-  const handleExclusiveDeliveryChoiceDraft = useCallback((choice: string) => {
+  const handleExclusiveDeliveryChoice = useCallback((choice: string) => {
     addSimpleMessage(choice === 'yes' ? 'Yes, Exclusive' : 'No, Shared', 'user');
     markStepCompleted('exclusive-delivery-question');
     setCurrentStep('order-system-question');
@@ -2744,9 +1664,9 @@ export function ConversationalChat({
           ]}
           mode="single"
           layout="card"
-          onChange={(value) => handleOrderSystemChoiceDraft(value as string)}
-          disabled={completedSteps.has('order-system-question') && currentStep !== 'order-system-question'}
-          locked={completedSteps.has('order-system-question') && currentStep !== 'order-system-question'}
+          onChange={(value) => handleOrderSystemChoice(value as string)}
+          disabled={shouldLockStep('order-system-question')}
+          locked={shouldLockStep('order-system-question')}
         />,
         undefined,
         undefined,
@@ -2755,7 +1675,7 @@ export function ConversationalChat({
     }, 500);
   }, [addSimpleMessage, markStepCompleted, addAgentResponse, completedSteps, currentStep, schedule]);
 
-  const handleOrderSystemChoiceDraft = useCallback((choice: string) => {
+  const handleOrderSystemChoice = useCallback((choice: string) => {
     addSimpleMessage(choice === 'yes' ? 'Yes, Use Orders' : 'No, Automatic', 'user');
     markStepCompleted('order-system-question');
     setCurrentStep('revenue-requirements-question');
@@ -2765,15 +1685,15 @@ export function ConversationalChat({
         addSimpleMessage('Great! Remember: You must create an order for this client to receive leads.', 'assistant');
         
         schedule(() => {
-          handleRevenueRequirementsQuestionDraft();
+          handleRevenueRequirementsQuestion();
         }, 800);
       } else {
-        handleRevenueRequirementsQuestionDraft();
+        handleRevenueRequirementsQuestion();
       }
     }, 500);
   }, [addSimpleMessage, markStepCompleted, addAgentResponse, schedule]);
 
-  const handleRevenueRequirementsQuestionDraft = useCallback(() => {
+  const handleRevenueRequirementsQuestion = useCallback(() => {
     schedule(() => {
       addAgentResponse(
         'Are there any revenue requirements?',
@@ -2795,9 +1715,9 @@ export function ConversationalChat({
           ]}
           mode="single"
           layout="card"
-          onChange={(value) => handleRevenueRequirementsChoiceDraft(value as string)}
-          disabled={completedSteps.has('revenue-requirements-question') && currentStep !== 'revenue-requirements-question'}
-          locked={completedSteps.has('revenue-requirements-question') && currentStep !== 'revenue-requirements-question'}
+          onChange={(value) => handleRevenueRequirementsChoice(value as string)}
+          disabled={shouldLockStep('revenue-requirements-question')}
+          locked={shouldLockStep('revenue-requirements-question')}
         />,
         undefined,
         undefined,
@@ -2806,7 +1726,7 @@ export function ConversationalChat({
     }, 500);
   }, [addAgentResponse, completedSteps, currentStep, schedule]);
 
-  const handleRevenueRequirementsChoiceDraft = useCallback((choice: string) => {
+  const handleRevenueRequirementsChoice = useCallback((choice: string) => {
     addSimpleMessage(choice === 'yes' ? 'Yes, Set Requirements' : 'No Requirements', 'user');
     markStepCompleted('revenue-requirements-question');
     setCurrentStep(choice === 'yes' ? 'revenue-requirements-details' : 'criteria-question');
@@ -2847,25 +1767,28 @@ export function ConversationalChat({
                   }
                 ]}
                 submitLabel="Continue"
-                onSubmit={() => handleRevenueRequirementsSubmitDraft()}
+                onSubmit={() => handleRevenueRequirementsSubmit()}
+                disabled={false}
+                locked={false}
               />
             ),
             stepId: 'revenue-requirements-details'
           }
         );
       } else {
-        handleCriteriaQuestionDraft();
+        handleCriteriaQuestion();
       }
     }, 500);
-  }, [addSimpleMessage, markStepCompleted, addMessage, schedule]);
+  }, [addSimpleMessage, markStepCompleted, addMessage, schedule, shouldLockStep]);
 
-  const handleRevenueRequirementsSubmitDraft = useCallback(() => {
+  const handleRevenueRequirementsSubmit = useCallback(() => {
     addSimpleMessage('Revenue requirements saved', 'user');
     markStepCompleted('revenue-requirements-details');
-    handleCriteriaQuestionDraft();
-  }, [addSimpleMessage, markStepCompleted]);
+    setCurrentStep('criteria-question');
+    handleCriteriaQuestion();
+  }, [addSimpleMessage, markStepCompleted, setCurrentStep]);
 
-  const handleCriteriaQuestionDraft = useCallback(() => {
+  const handleCriteriaQuestion = useCallback(() => {
     schedule(() => {
       addAgentResponse(
         'Would you like to apply any criteria (e.g., state, zip, or lead field filters)?',
@@ -2887,9 +1810,9 @@ export function ConversationalChat({
           ]}
           mode="single"
           layout="card"
-          onChange={(value) => handleCriteriaChoiceDraft(value as string)}
-          disabled={completedSteps.has('criteria-question') && currentStep !== 'criteria-question'}
-          locked={completedSteps.has('criteria-question') && currentStep !== 'criteria-question'}
+          onChange={(value) => handleCriteriaChoice(value as string)}
+          disabled={shouldLockStep('criteria-question')}
+          locked={shouldLockStep('criteria-question')}
         />,
         undefined,
         undefined,
@@ -2898,7 +1821,7 @@ export function ConversationalChat({
     }, 500);
   }, [addAgentResponse, completedSteps, currentStep, schedule]);
 
-  const handleCriteriaChoiceDraft = useCallback((choice: string) => {
+  const handleCriteriaChoice = useCallback((choice: string) => {
     addSimpleMessage(choice === 'yes' ? 'Yes, Add Filters' : 'No Filters', 'user');
     markStepCompleted('criteria-question');
     setCurrentStep(choice === 'yes' ? 'criteria-details' : 'delivery-account-creation');
@@ -2935,19 +1858,21 @@ export function ConversationalChat({
                   }
                 ]}
                 submitLabel="Create Delivery Account"
-                onSubmit={() => handleDeliveryAccountSubmitDraft()}
+                onSubmit={() => handleDeliveryAccountSubmit()}
+                disabled={false}
+                locked={false}
               />
             ),
             stepId: 'criteria-details'
           }
         );
       } else {
-        handleDeliveryAccountSubmitDraft();
+        handleDeliveryAccountSubmit();
       }
     }, 500);
-  }, [addSimpleMessage, markStepCompleted, addMessage, schedule]);
+  }, [addSimpleMessage, markStepCompleted, addMessage, schedule, shouldLockStep]);
 
-  const handleDeliveryAccountSubmitDraft = useCallback((accountData?: Record<string, any>) => {
+  const handleDeliveryAccountSubmit = useCallback((accountData?: Record<string, any>) => {
     addSimpleMessage('Delivery account created', 'user');
     // Mark criteria-details as completed if we're coming from that step
     if (currentStep === 'criteria-details') {
@@ -2987,7 +1912,7 @@ export function ConversationalChat({
               id: 'create-another',
               label: 'Create Another Client',
               variant: 'outline' as const,
-              onClick: () => handleToolSelection('create-new-client-draft')
+              onClick: () => startNewFlow('create-new-client-draft')
             },
             {
               id: 'back-home',
@@ -2999,7 +1924,7 @@ export function ConversationalChat({
                 } else {
                   // Fallback: Reset flow state locally
                   resetSession();
-                  setCompletedSteps(new Set());
+                  setCompletedSteps(new Map());
                   setCurrentStep(null);
                   setCurrentFlow(null);
                   setFlowActive(false);
@@ -3009,7 +1934,9 @@ export function ConversationalChat({
                 }
               }
             }
-          ]
+          ],
+          undefined, // sources
+          'creation' // stepId
         );
         
         markStepCompleted('creation');
@@ -3018,7 +1945,7 @@ export function ConversationalChat({
     }, 500);
   }, [addSimpleMessage, markStepCompleted, addAgentResponse, addProcessingMessage, schedule, handleToolSelection, handleStartOver, currentStep]);
 
-  const handleSkipDeliveryAccountDraft = useCallback(() => {
+  const handleSkipDeliveryAccount = useCallback(() => {
     addSimpleMessage('No, Skip for Now', 'user');
     markStepCompleted('delivery-account-choice');
     setCurrentStep('creation');
@@ -3052,7 +1979,7 @@ export function ConversationalChat({
     }, 500);
   }, [addSimpleMessage, addAgentResponse, schedule, handleToolSelection, handleStartOver]);
 
-  const handleClientCreationDraft = useCallback(() => {
+  const handleClientCreation = useCallback(() => {
     addSimpleMessage('Create Client', 'user');
     markStepCompleted('configuration');
     setCurrentStep('creation');
@@ -3083,7 +2010,7 @@ export function ConversationalChat({
               id: 'create-another',
               label: 'Create Another Client',
               variant: 'outline' as const,
-              onClick: () => handleToolSelection('create-new-client-draft')
+              onClick: () => startNewFlow('create-new-client-draft')
             },
             {
               id: 'back-home',
@@ -3114,12 +2041,12 @@ export function ConversationalChat({
               steps={BULK_UPLOAD_STEPS}
               title="Bulk Client Upload Process"
               showIndex={true}
-              locked={false}
+              locked={shouldLockStep('overview')}
             />
             <Button 
               onClick={() => proceedToTemplate()} 
               className="gap-2 font-medium"
-              disabled={false}
+              disabled={shouldLockStep('overview')}
             >
               <ArrowRight className="w-4 h-4" />
               Start Upload
@@ -3129,7 +2056,7 @@ export function ConversationalChat({
         stepId: 'overview'
       }
     );
-  }, [addMessage]);
+  }, [addMessage, shouldLockStep]);
 
   const proceedToTemplate = useCallback(() => {
     addSimpleMessage('Start Upload', 'user');
@@ -3213,8 +2140,8 @@ export function ConversationalChat({
           multiple={false}
           maxSizeMb={10}
           onUploadStart={(files) => handleFileUploadStart(files[0])}
-          disabled={completedSteps.has('upload') && currentStep !== 'upload'}
-          locked={completedSteps.has('upload') && currentStep !== 'upload'}
+          disabled={shouldLockStep('upload')}
+          locked={shouldLockStep('upload')}
         />,
         undefined, // suggestedActions
         undefined, // sources  
@@ -3238,8 +2165,8 @@ export function ConversationalChat({
           title="Validating Data"
           state="processing"
           detail="Checking file format and required fields..."
-          disabled={completedSteps.has('validation') && currentStep !== 'validation'}
-          locked={completedSteps.has('validation') && currentStep !== 'validation'}
+          disabled={shouldLockStep('validation')}
+          locked={shouldLockStep('validation')}
         />,
         undefined, // suggestedActions
         undefined, // sources
@@ -3287,8 +2214,8 @@ export function ConversationalChat({
               'notify': 'todo'
             }}
             current="parse"
-            disabled={completedSteps.has('processing') && currentStep !== 'processing'}
-            locked={completedSteps.has('processing') && currentStep !== 'processing'}
+            disabled={shouldLockStep('processing')}
+            locked={shouldLockStep('processing')}
           />
         </div>,
         undefined, // suggestedActions
@@ -3512,11 +2439,7 @@ export function ConversationalChat({
           {messages.map((message) => (
             <div 
               key={message.id} 
-              className={`transition-all duration-300 ${
-                message.stepId && completedSteps.has(message.stepId) && currentStep !== message.stepId
-                  ? 'opacity-40 pointer-events-none' 
-                  : 'opacity-100'
-              }`}
+              className="transition-all duration-300"
             >
               {message.isWelcome ? (
                 // Special welcome message layout - left-aligned with flow blocking
@@ -3555,7 +2478,146 @@ export function ConversationalChat({
                       </div>
                     </Card>
                     
-                    {message.component && (
+                    {message.component && message.stepId === 'setup-overview' ? (
+                      // Render the setup overview dynamically with current locking state
+                      <div className={`mt-4 sm:mt-6 ${shouldLockStep('setup-overview') ? 'opacity-60 pointer-events-none' : ''}`}>
+                        <div className="border rounded-lg p-4 sm:p-6 bg-card shadow-sm">
+                          <div className="space-y-4">
+                            <Steps
+                              kind="steps"
+                              variant="overview"
+                              steps={CLIENT_SETUP_STEPS}
+                              title="Client Setup Process (Draft)"
+                              showIndex={true}
+                              locked={shouldLockStep('setup-overview')}
+                            />
+                            <Button 
+                              onClick={() => proceedToBasicInfo()} 
+                              className="gap-2 font-medium"
+                              disabled={shouldLockStep('setup-overview')}
+                            >
+                              <ArrowRight className="w-4 h-4" />
+                              Start Setup
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    ) : message.component && message.stepId === 'basic-info' ? (
+                      // Render the basic info form dynamically with current derived values
+                      <div className={`mt-4 sm:mt-6 ${shouldLockStep('basic-info') ? 'opacity-60 pointer-events-none' : ''}`}>
+                        <div className="border rounded-lg p-4 sm:p-6 bg-card shadow-sm">
+                          <Form
+                            kind="form"
+                            title="Client Information"
+                            description="Basic client details and auto-generated credentials"
+                            sections={[
+                              { 
+                                id: 'basic', 
+                                fields: [
+                                  { 
+                                    id: 'companyName', 
+                                    label: 'Company Name', 
+                                    type: 'text' as const, 
+                                    required: true, 
+                                    placeholder: 'Enter company name' 
+                                  },
+                                  { 
+                                    id: 'email', 
+                                    label: 'Email Address', 
+                                    type: 'email' as const, 
+                                    required: true, 
+                                    placeholder: 'client@example.com' 
+                                  }
+                                ]
+                              },
+                              {
+                                id: 'credentials',
+                                title: 'Client Credentials', 
+                                description: 'Username and password will be auto-generated when you enter a valid email',
+                                fields: [
+                                  {
+                                    id: 'username',
+                                    label: 'Username',
+                                    type: 'text' as const,
+                                    placeholder: 'Will be generated from email address',
+                                    value: ''
+                                  },
+                                  {
+                                    id: 'tempPassword',
+                                    label: 'Password',
+                                    type: 'text' as const,
+                                    placeholder: 'Will be auto-generated securely',
+                                    value: ''
+                                  }
+                                ]
+                              }
+                            ]}
+                            validations={[
+                              {
+                                fieldId: 'companyName',
+                                rule: 'required' as const,
+                                message: 'Company name is required'
+                              },
+                              {
+                                fieldId: 'email',
+                                rule: 'required' as const,
+                                message: 'Email address is required'
+                              },
+                              {
+                                fieldId: 'email',
+                                rule: 'regex' as const,
+                                pattern: '^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$',
+                                message: 'Please enter a valid email address'
+                              }
+                            ]}
+                            derive={[
+                              {
+                                fieldId: 'username',
+                                from: ['email'],
+                                strategy: 'usernameFromEmail',
+                                editable: true
+                              },
+                              {
+                                fieldId: 'tempPassword',
+                                from: ['email'],
+                                strategy: 'strongPassword', 
+                                editable: true
+                              }
+                            ]}
+                            submitLabel="Continue"
+                            onSubmit={handleBasicInfoSubmit}
+                            onRequestDerive={handleDerive}
+                            derivedValues={derivedValues}
+                            disabled={shouldLockStep('basic-info')}
+                            locked={shouldLockStep('basic-info')}
+                          />
+                        </div>
+                      </div>
+                    ) : message.component && message.stepId === 'overview' ? (
+                      // Render the bulk upload overview dynamically with current locking state  
+                      <div className={`mt-4 sm:mt-6 ${shouldLockStep('overview') ? 'opacity-60 pointer-events-none' : ''}`}>
+                        <div className="border rounded-lg p-4 sm:p-6 bg-card shadow-sm">
+                          <div className="space-y-4">
+                            <Steps
+                              kind="steps"
+                              variant="overview"
+                              steps={BULK_UPLOAD_STEPS}
+                              title="Bulk Client Upload Process"
+                              showIndex={true}
+                              locked={shouldLockStep('overview')}
+                            />
+                            <Button 
+                              onClick={() => proceedToTemplate()} 
+                              className="gap-2 font-medium"
+                              disabled={shouldLockStep('overview')}
+                            >
+                              <ArrowRight className="w-4 h-4" />
+                              Start Upload
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    ) : message.component && (
                       (() => {
                         // Determine if component needs container wrapper
                         const componentType = (message.component as any)?.props?.kind;
@@ -3571,14 +2633,47 @@ export function ConversationalChat({
                         const noWrapperTypes = ['process-state', 'alert', 'help-sources'];
                         const needsWrapper = !noWrapperTypes.includes(componentType) && !isButtonGroup && !isSourcesList;
                         
+                        // Determine if this module should be locked
+                        // Never lock help-sources or completion summaries
+                        const neverLockTypes = ['help-sources', 'summary'];
+                        const shouldLock = message.stepId && shouldLockStep(message.stepId) && !neverLockTypes.includes(componentType);
+                        
+                        // Clone component with updated locking props if needed
+                        let componentToRender = message.component;
+                        if (shouldLock && React.isValidElement(message.component)) {
+                          // If it's a wrapper div with children, we need to update the children
+                          if (message.component.type === 'div' && message.component.props?.children) {
+                            const children = React.Children.map(message.component.props.children, (child) => {
+                              if (React.isValidElement(child)) {
+                                // Update Steps components
+                                if (child.type === Steps || (child.type as any)?.name === 'Steps') {
+                                  return React.cloneElement(child as any, { locked: true, disabled: true });
+                                }
+                                // Update Button components
+                                if (child.type === Button || (child.type as any)?.name === 'Button' || child.props?.className?.includes('gap-2')) {
+                                  return React.cloneElement(child as any, { disabled: true });
+                                }
+                              }
+                              return child;
+                            });
+                            componentToRender = React.cloneElement(message.component as any, {}, children);
+                          } else {
+                            // Direct component, just add locking props
+                            componentToRender = React.cloneElement(message.component as any, { 
+                              locked: true, 
+                              disabled: true 
+                            });
+                          }
+                        }
+                        
                         return (
-                          <div className="mt-4 sm:mt-6">
+                          <div className={`mt-4 sm:mt-6 ${shouldLock ? 'opacity-60 pointer-events-none' : ''}`}>
                             {needsWrapper ? (
                               <div className="border rounded-lg p-4 sm:p-6 bg-card shadow-sm">
-                                {message.component}
+                                {componentToRender}
                               </div>
                             ) : (
-                              message.component
+                              componentToRender
                             )}
                           </div>
                         );
@@ -3587,34 +2682,60 @@ export function ConversationalChat({
                     
                     {/* Suggested Actions - only for assistant messages */}
                     {message.sender === 'assistant' && message.suggestedActions && message.suggestedActions.length > 0 && (
-                      <div className="mt-4">
-                        <div className="flex flex-wrap gap-2">
-                          {message.suggestedActions.map((action) => {
-                            const isLocked = flowActive && !message.isWelcome;
-                            const isSelected = action.selected || selectedActions.has(action.id);
-                            
-                            return (
-                              <Button
-                                key={action.id}
-                                variant={action.variant || 'outline'}
-                                size="sm"
-                                className={`h-8 text-xs gap-2 transition-colors ${
-                                  isLocked 
-                                    ? 'opacity-40 pointer-events-none bg-muted/20' 
-                                    : isSelected 
-                                      ? 'border-primary bg-primary/5 text-primary hover:bg-primary/10' 
-                                      : ''
-                                }`}
-                                disabled={action.disabled || isLocked}
-                                onClick={() => handleSuggestedActionClick(action.id, action.onClick)}
-                              >
-                                {action.icon && action.icon}
-                                {action.label}
-                              </Button>
-                            );
-                          })}
-                        </div>
-                      </div>
+                      (() => {
+                        const componentType = (message.component as any)?.props?.kind;
+                        const neverLockTypes = ['help-sources', 'summary'];
+                        
+                        // Check if any suggested action in this message has been selected
+                        const hasSelectedAction = message.suggestedActions?.some(action => 
+                          action.selected || selectedActions.has(action.id)
+                        );
+                        
+                        // Universal locking: if ANY action has been selected anywhere, lock all other action groups
+                        const hasAnyActionSelected = selectedActions.size > 0;
+                        
+                        // Lock suggested actions if:
+                        // 1. Step is completed, OR
+                        // 2. Any action in this message has been triggered, OR  
+                        // 3. Any action anywhere has been selected (universal locking)
+                        const shouldLockActions = (
+                          (message.stepId && shouldLockStep(message.stepId)) || 
+                          hasSelectedAction ||
+                          (hasAnyActionSelected && !hasSelectedAction)
+                        ) && !neverLockTypes.includes(componentType);
+                        
+                        return (
+                          <div className={`mt-4 ${shouldLockActions ? 'opacity-60 pointer-events-none' : ''}`}>
+                            <div className="flex flex-wrap gap-2">
+                              {message.suggestedActions.map((action) => {
+                                const isSelected = action.selected || selectedActions.has(action.id);
+                                
+                                return (
+                                  <Button
+                                    key={action.id}
+                                    variant={action.variant || 'outline'}
+                                    size="sm"
+                                    className={`h-8 text-xs gap-2 transition-all duration-300 ${
+                                      isSelected 
+                                        ? shouldLockActions 
+                                          ? 'border-primary bg-primary/20 text-primary font-medium scale-95 ring-2 ring-primary/20'
+                                          : 'border-primary bg-primary/10 text-primary hover:bg-primary/15 opacity-70 scale-95'
+                                        : shouldLockActions 
+                                          ? 'opacity-50' 
+                                          : 'hover:bg-accent'
+                                    }`}
+                                    disabled={action.disabled || shouldLockActions}
+                                    onClick={() => handleSuggestedActionClick(action.id, action.onClick)}
+                                  >
+                                    {action.icon && action.icon}
+                                    {action.label}
+                                  </Button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })()
                     )}
 
                     {/* Sources are now handled as proper components within messages */}

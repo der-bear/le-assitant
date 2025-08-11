@@ -10,12 +10,6 @@ export const QUICK_TILES = [
     icon: Building
   },
   {
-    id: 'create-new-client-draft',
-    title: 'Create New Client Draft',
-    description: 'Draft version for experimenting with new client setup flow',
-    icon: Building
-  },
-  {
     id: 'bulk-client-upload',
     title: 'Bulk Client Upload',
     description: 'Upload multiple clients at once using an Excel file with automatic credential generation',
@@ -171,7 +165,6 @@ export const HELP_SOURCES_BY_CATEGORY: Record<string, Array<{
 // Tool name mappings
 export const TOOL_NAMES: Record<string, string> = {
   'create-new-client': 'Create New Client',
-  'create-new-client-draft': 'Create New Client Draft',
   'bulk-client-upload': 'Bulk Client Upload'
 };
 

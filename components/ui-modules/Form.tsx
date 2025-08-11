@@ -131,6 +131,7 @@ export function Form({
     allSections.forEach(section => {
       section.fields.forEach(field => {
         if (field.value !== undefined) {
+          console.log('🎯 Form component setting initial value:', field.id, '=', field.value);
           initialValues[field.id] = field.value;
         }
       });
@@ -138,6 +139,7 @@ export function Form({
     
     // Set initial values directly (no comparison needed since key changes force re-mount)
     if (Object.keys(initialValues).length > 0) {
+      console.log('📝 Form component setting initial values:', initialValues);
       setValues(initialValues);
     }
   }, [id]); // Only depend on the form ID/key to avoid loops
@@ -721,7 +723,7 @@ export function Form({
             <div className="flex items-center gap-1">
               <h3 className="text-base font-medium">{title}</h3>
               {helpUrl && (
-                <Button variant="ghost" size="sm" asChild className="h-4 w-4 p-0">
+                <Button variant="ghost" size="sm" asChild className={`h-4 w-4 p-0 ${locked ? 'pointer-events-auto' : ''}`}>
                   <a href={helpUrl} target="_blank" rel="noopener noreferrer">
                     <HelpCircle className="h-3 w-3" />
                   </a>

@@ -98,11 +98,11 @@ export function Metrics({
     const count = metrics.length;
     if (layout === 'stacked') return 'space-y-4';
     
-    // Responsive grid: 4 cols on xl, 2 cols on md, 1 col on sm
+    // Responsive grid: larger cards with better spacing
     if (count === 1) return 'grid grid-cols-1';
     if (count === 2) return 'grid grid-cols-1 md:grid-cols-2';
     if (count === 3) return 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3';
-    return 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4';
+    return 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4';
   }, [metrics.length, layout]);
 
   if (loading) {

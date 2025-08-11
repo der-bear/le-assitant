@@ -412,11 +412,11 @@ export function Chart({
 
       {/* Header Metrics */}
       {headerMetrics.length > 0 && (
-        <div className={`grid gap-4 ${
+        <div className={`grid gap-3 md:gap-4 ${
           headerMetrics.length === 1 ? 'grid-cols-1' :
           headerMetrics.length === 2 ? 'grid-cols-1 md:grid-cols-2' :
           headerMetrics.length === 3 ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' :
-          'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
+          'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'
         }`}>
           {headerMetrics.map((metric) => (
             <Card key={metric.id} className="p-4 bg-card border-border">
