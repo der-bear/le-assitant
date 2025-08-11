@@ -19,7 +19,8 @@ import {
   Wrench,
   ArrowRight,
   Bot,
-  ExternalLink
+  ExternalLink,
+  Download
 } from 'lucide-react';
 
 interface SuggestedAction {
@@ -28,6 +29,7 @@ interface SuggestedAction {
   variant?: 'default' | 'outline' | 'secondary' | 'ghost';
   icon?: React.ReactNode;
   disabled?: boolean;
+  selected?: boolean;
   onClick: () => void;
 }
 
@@ -83,6 +85,7 @@ export function ConversationalChat({
   const [flowActive, setFlowActive] = useState(false);
   const [derivedValues, setDerivedValues] = useState<Record<string, any>>({});
   const [currentStep, setCurrentStep] = useState<string | null>(null);
+  const [selectedActions, setSelectedActions] = useState<Set<string>>(new Set());
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Session + timers guard to prevent late async inserts after reset or flow changes
@@ -239,6 +242,7 @@ export function ConversationalChat({
     setFlowActive(false);
     setDerivedValues({});
     setCurrentStep(null);
+    setSelectedActions(new Set());
     // Update messages to unlock all locked components
     setMessages(prev => prev.map(msg => ({
       ...msg,
@@ -247,7 +251,12 @@ export function ConversationalChat({
       component: msg.component && !msg.isWelcome ? React.cloneElement(
         msg.component as React.ReactElement,
         { locked: false, disabled: false }
-      ) : msg.component
+      ) : msg.component,
+      // Reset suggested actions selection state
+      suggestedActions: msg.suggestedActions?.map(action => ({
+        ...action,
+        selected: false
+      }))
     })).filter(msg => msg.isWelcome));
     setInputValue('');
     setIsTyping(false);
@@ -528,6 +537,26 @@ export function ConversationalChat({
   const markStepCompleted = useCallback((stepId: string) => {
     setCompletedSteps(prev => new Set([...prev, stepId]));
   }, []);
+
+  // Helper to handle suggested action clicks with locking and selection logic
+  const handleSuggestedActionClick = useCallback((actionId: string, originalOnClick: () => void) => {
+    // Prevent click if flow is active and this isn't a welcome message action
+    if (flowActive) return;
+    
+    // Mark this action as selected
+    setSelectedActions(prev => new Set([...prev, actionId]));
+    
+    // Update the message to show the action as selected
+    setMessages(prev => prev.map(msg => ({
+      ...msg,
+      suggestedActions: msg.suggestedActions?.map(action => 
+        action.id === actionId ? { ...action, selected: true } : action
+      )
+    })));
+    
+    // Execute the original click handler
+    originalOnClick();
+  }, [flowActive]);
 
   const handleClientSetup = useCallback(() => {
     const steps = [
@@ -1210,182 +1239,306 @@ export function ConversationalChat({
   }, [addMessage, markStepCompleted, handleToolSelection, schedule, addProcessingMessage]);
 
   const handleBulkUpload = useCallback(() => {
-    // Set current step for proper flow management
-    setCurrentStep('bulk-upload');
-    
+    const steps = [
+      { id: 'overview', title: 'Process Overview', hint: 'Understanding the bulk upload process' },
+      { id: 'template', title: 'Download Template', hint: 'Get the Excel template file' },
+      { id: 'upload', title: 'Upload File', hint: 'Upload your completed client data' },
+      { id: 'validation', title: 'Validation', hint: 'System validates your data' },
+      { id: 'processing', title: 'Processing', hint: 'Creating clients and generating credentials' },
+      { id: 'completion', title: 'Completion', hint: 'Review results and next steps' }
+    ];
+
     addMessage(
-      'I\'ll help you upload multiple clients at once using an Excel file. The system will automatically generate usernames and passwords for each client.',
+      'I\'ll help you upload multiple clients at once using an Excel file. The system will parse your data, validate it, and automatically generate secure credentials for each client.',
       'assistant',
       {
         component: (
-          <div className="space-y-6">
-            <FileDrop
-              kind="filedrop"
-              title="Bulk Client Upload"
-              description="Upload multiple clients using Excel template"
-              accept=".xlsx,.xls,.csv"
-              multiple={false}
-              maxSizeMb={10}
-              onUploadStart={(files) => {
-                console.log('Bulk upload started:', files);
-                // Simulate upload processing
-                setTimeout(() => {
-                  handleBulkUploadComplete(files[0]);
-                }, 2000);
-              }}
-            />
-            <div className="flex gap-3">
-              <Button 
-                onClick={() => handleBulkUploadComplete(new File([''], 'sample.xlsx'))}
-                className="font-medium"
-              >
-                Continue
-              </Button>
-            </div>
-          </div>
-        ),
-        stepId: 'bulk-upload'
-      }
-    );
-  }, [addMessage, setCurrentStep]);
-
-
-  const handleBulkUploadComplete = useCallback((file: File) => {
-    addSimpleMessage(`Uploaded: ${file.name}`, 'user');
-    markStepCompleted('bulk-upload');
-    setCurrentStep('processing');
-
-    // Show processing state
-    schedule(() => {
-      addMessage(
-        'Processing your bulk client upload. Please wait while I validate and create the clients...',
-        'assistant',
-        {
-          component: (
+          <div className="space-y-4">
             <Steps
               kind="steps"
-              variant="progress"
-              title="Processing Bulk Upload"
-              steps={[
-                { id: 'validate', title: 'Validating file format' },
-                { id: 'parse', title: 'Parsing client data' },
-                { id: 'create', title: 'Creating client accounts' },
-                { id: 'generate', title: 'Generating credentials' },
-                { id: 'notify', title: 'Sending welcome emails' }
-              ]}
-              status={{
-                'validate': 'done',
-                'parse': 'current',
-                'create': 'todo',
-                'generate': 'todo',
-                'notify': 'todo'
-              }}
-              current="parse"
+              variant="overview"
+              steps={steps}
+              title="Bulk Client Upload Process"
+              showIndex={true}
+              locked={false}
             />
-          ),
-          stepId: 'processing'
-        }
-      );
+            <Button 
+              onClick={() => proceedToTemplate()} 
+              className="gap-2 font-medium"
+              disabled={false}
+            >
+              <ArrowRight className="w-4 h-4" />
+              Start Upload
+            </Button>
+          </div>
+        ),
+        stepId: 'overview'
+      }
+    );
+  }, [addMessage]);
 
+  const proceedToTemplate = useCallback(() => {
+    addSimpleMessage('Start Upload', 'user');
+    
+    // Mark overview as completed  
+    markStepCompleted('overview');
+    setCurrentStep('template');
+    
+    schedule(() => {
+      addAgentResponse(
+        'First, you\'ll need the Excel template to format your client data correctly. The template includes all required fields and formatting guidelines.',
+        <div className="space-y-6">
+          <Alert
+            kind="alert"
+            type="info"
+            title="Template Requirements"
+            message="The Excel template contains required columns for company name, contact information, and delivery preferences. Each row represents one client."
+          />
+          <div className="flex gap-3">
+            <Button 
+              onClick={() => handleTemplateDownload()}
+              className="gap-2 font-medium"
+            >
+              <Download className="w-4 h-4" />
+              Download Template
+            </Button>
+            <Button 
+              variant="outline"
+              onClick={() => proceedToUpload()}
+              className="font-medium"
+            >
+              I Have Template
+            </Button>
+          </div>
+        </div>,
+        undefined, // suggestedActions
+        undefined, // sources
+        'template' // stepId
+      );
+    }, 500);
+  }, [addSimpleMessage, markStepCompleted, addAgentResponse, schedule]);
+
+  const handleTemplateDownload = useCallback(() => {
+    addSimpleMessage('Download Template', 'user');
+    
+    // Simulate template download
+    schedule(() => {
+      addAgentResponse(
+        'Template downloaded successfully! Fill in your client data and return here when ready to upload.',
+        <div className="flex gap-3">
+          <Button 
+            onClick={() => proceedToUpload()}
+            className="gap-2 font-medium"
+          >
+            <ArrowRight className="w-4 h-4" />
+            Ready to Upload
+          </Button>
+        </div>,
+        undefined, // suggestedActions  
+        undefined, // sources
+        'template' // stepId
+      );
+    }, 1000);
+  }, [addSimpleMessage, addAgentResponse, schedule]);
+
+  const proceedToUpload = useCallback(() => {
+    addSimpleMessage('Ready to Upload', 'user');
+    
+    // Mark template as completed
+    markStepCompleted('template');
+    setCurrentStep('upload');
+    
+    schedule(() => {
+      addAgentResponse(
+        'Perfect! Now upload your completed Excel file. The system will validate the format and data before processing.',
+        <FileDrop
+          kind="filedrop"
+          title="Upload Client Data"
+          description="Select your completed Excel file with client information"
+          accept=".xlsx,.xls,.csv"
+          multiple={false}
+          maxSizeMb={10}
+          onUploadStart={(files) => handleFileUploadStart(files[0])}
+          disabled={completedSteps.has('upload') && currentStep !== 'upload'}
+          locked={completedSteps.has('upload') && currentStep !== 'upload'}
+        />,
+        undefined, // suggestedActions
+        undefined, // sources  
+        'upload' // stepId
+      );
+    }, 500);
+  }, [addSimpleMessage, markStepCompleted, addAgentResponse, completedSteps, currentStep, schedule]);
+
+  const handleFileUploadStart = useCallback((file: File) => {
+    addSimpleMessage(`Uploaded: ${file.name}`, 'user');
+    
+    // Mark upload as completed
+    markStepCompleted('upload');
+    setCurrentStep('validation');
+    
+    schedule(() => {
+      addAgentResponse(
+        'File uploaded successfully! Now validating the data format and checking for any issues...',
+        <ProcessState
+          kind="process-state"
+          title="Validating Data"
+          state="processing"
+          detail="Checking file format and required fields..."
+          disabled={completedSteps.has('validation') && currentStep !== 'validation'}
+          locked={completedSteps.has('validation') && currentStep !== 'validation'}
+        />,
+        undefined, // suggestedActions
+        undefined, // sources
+        'validation' // stepId  
+      );
+      
+      // Simulate validation process
+      schedule(() => {
+        handleValidationComplete();
+      }, 3000);
+    }, 500);
+  }, [addSimpleMessage, markStepCompleted, addAgentResponse, completedSteps, currentStep, schedule]);
+
+  const handleValidationComplete = useCallback(() => {
+    // Mark validation as completed
+    markStepCompleted('validation');
+    setCurrentStep('processing');
+    
+    schedule(() => {
+      addAgentResponse(
+        'Validation successful! Found 25 clients ready for processing. Now creating accounts and generating credentials...',
+        <div className="space-y-4">
+          <Alert
+            kind="alert" 
+            type="success"
+            title="Validation Complete"
+            message="All client data validated successfully. No errors found."
+          />
+          <Steps
+            kind="steps"
+            variant="progress" 
+            title="Processing Clients"
+            steps={[
+              { id: 'validate', title: 'Validating file format' },
+              { id: 'parse', title: 'Parsing client data' },
+              { id: 'create', title: 'Creating client accounts' },
+              { id: 'generate', title: 'Generating credentials' },
+              { id: 'notify', title: 'Sending welcome emails' }
+            ]}
+            status={{
+              'validate': 'done',
+              'parse': 'current', 
+              'create': 'todo',
+              'generate': 'todo',
+              'notify': 'todo'
+            }}
+            current="parse"
+            disabled={completedSteps.has('processing') && currentStep !== 'processing'}
+            locked={completedSteps.has('processing') && currentStep !== 'processing'}
+          />
+        </div>,
+        undefined, // suggestedActions
+        undefined, // sources
+        'processing' // stepId
+      );
+      
       // Simulate processing steps
       let stepIndex = 1;
       const steps = ['parse', 'create', 'generate', 'notify'];
       const processInterval = setInterval(() => {
         if (stepIndex < steps.length) {
-          // Update progress (in a real app, this would come from server)
           stepIndex++;
           if (stepIndex === steps.length) {
             clearInterval(processInterval);
-            handleBulkUploadSuccess();
+            handleProcessingComplete();
           }
         }
       }, 1500);
-    }, 1000);
-  }, [addMessage, markStepCompleted, schedule]);
+    }, 500);
+  }, [markStepCompleted, addAgentResponse, completedSteps, currentStep, schedule]);
 
-  const handleBulkUploadSuccess = useCallback(() => {
+  const handleProcessingComplete = useCallback(() => {
+    // Mark processing as completed
     markStepCompleted('processing');
-    setCurrentStep('results');
+    setCurrentStep('completion');
     
     schedule(() => {
-      addMessage(
-        'Bulk client upload completed successfully! Here\'s a summary of what was created:',
-        'assistant',
-        {
-          component: (
-            <div className="space-y-4">
-              <Alert
-                kind="alert"
-                type="success"
-                title="Upload Complete!"
-                message="All clients have been created and welcome emails sent."
-              />
-              
-              <SummaryCard
-                kind="summary"
-                title="Upload Results"
-                items={[
-                  {
-                    id: 'total',
-                    title: 'Total Clients Processed',
-                    subtitle: '25',
-                    status: 'success' as const,
-                    message: 'All clients successfully created'
-                  },
-                  {
-                    id: 'credentials',
-                    title: 'Credentials Generated',
-                    subtitle: '25',
-                    status: 'success' as const,
-                    message: 'Unique usernames and secure passwords'
-                  },
-                  {
-                    id: 'emails',
-                    title: 'Welcome Emails Sent',
-                    subtitle: '25', 
-                    status: 'success' as const,
-                    message: 'Clients notified with login details'
-                  }
-                ]}
-                actions={[
-                  { id: 'download-report', label: 'Download Report' },
-                  { id: 'view-clients', label: 'View Clients' }
-                ]}
-              />
-            </div>
-          ),
-          stepId: 'results'
-        }
-      );
-
-      // Add suggested actions
-      schedule(() => {
-        addMessage(
-          '',
-          'assistant',
+      addAgentResponse(
+        'Bulk client upload completed successfully! All clients have been created with secure credentials and welcome emails sent.',
+        <div className="space-y-4">
+          <Alert
+            kind="alert"
+            type="success"
+            title="Upload Complete!"
+            message="All 25 clients have been successfully created and configured."
+          />
+          
+          <SummaryCard
+            kind="summary"
+            title="Upload Results"
+            items={[
+              {
+                id: 'total',
+                title: 'Total Clients Processed',
+                subtitle: '25 clients',
+                status: 'success' as const,
+                message: 'All clients successfully created'
+              },
+              {
+                id: 'credentials',
+                title: 'Credentials Generated',
+                subtitle: '25 unique sets',
+                status: 'success' as const,
+                message: 'Secure usernames and passwords generated'
+              },
+              {
+                id: 'emails',
+                title: 'Welcome Emails Sent',
+                subtitle: '25 emails delivered',
+                status: 'success' as const,
+                message: 'Clients notified with login details'
+              }
+            ]}
+            actions={[
+              { id: 'download-report', label: 'Download Report', variant: 'outline' },
+              { id: 'view-clients', label: 'View All Clients', variant: 'outline' }
+            ]}
+            onAction={(actionId) => {
+              if (actionId === 'download-report') {
+                addSimpleMessage('Download Report', 'user');
+              } else if (actionId === 'view-clients') {
+                addSimpleMessage('View All Clients', 'user');
+              }
+            }}
+          />
+        </div>,
+        [
           {
-            component: (
-              <div className="flex justify-start gap-3">
-                <Button 
-                  onClick={() => handleToolSelection('create-new-client')}
-                  className="font-medium"
-                >
-                  Create Another Client
-                </Button>
-                <Button 
-                  variant="outline"
-                  onClick={() => addSimpleMessage('Show client list', 'user')}
-                  className="font-medium"
-                >
-                  View All Clients
-                </Button>
-              </div>
-            )
+            id: 'create-another', 
+            label: 'Create Another Client',
+            variant: 'outline' as const,
+            onClick: () => handleToolSelection('create-new-client')
+          },
+          {
+            id: 'bulk-upload-more',
+            label: 'Upload More Clients', 
+            variant: 'outline' as const,
+            onClick: () => handleToolSelection('bulk-client-upload')
           }
-        );
+        ],
+        undefined, // sources
+        'completion' // stepId
+      );
+      
+      // Mark completion and finish flow
+      schedule(() => {
+        markStepCompleted('completion');
+        setCurrentFlow(null);
+        setFlowActive(false);
       }, 1000);
     }, 500);
-  }, [addMessage, markStepCompleted, schedule, handleToolSelection]);
+  }, [markStepCompleted, addAgentResponse, addSimpleMessage, handleToolSelection, schedule]);
+
 
   const handleUserInput = useCallback((input: string) => {
     const lowerInput = input.toLowerCase();
@@ -1580,25 +1733,32 @@ export function ConversationalChat({
                     
                     {/* Suggested Actions - only for assistant messages */}
                     {message.sender === 'assistant' && message.suggestedActions && message.suggestedActions.length > 0 && (
-                      <div className={`mt-4 ${flowActive && !message.isWelcome ? 'opacity-40 pointer-events-none' : ''}`}>
+                      <div className="mt-4">
                         <div className="flex flex-wrap gap-2">
-                          {message.suggestedActions.map((action) => (
-                            <Button
-                              key={action.id}
-                              variant={action.variant || 'outline'}
-                              size="sm"
-                              className={`h-8 text-xs gap-2 ${
-                                flowActive && !message.isWelcome 
-                                  ? 'opacity-40 pointer-events-none bg-muted/20' 
-                                  : ''
-                              }`}
-                              disabled={action.disabled || (flowActive && !message.isWelcome)}
-                              onClick={action.onClick}
-                            >
-                              {action.icon && action.icon}
-                              {action.label}
-                            </Button>
-                          ))}
+                          {message.suggestedActions.map((action) => {
+                            const isLocked = flowActive && !message.isWelcome;
+                            const isSelected = action.selected || selectedActions.has(action.id);
+                            
+                            return (
+                              <Button
+                                key={action.id}
+                                variant={isSelected ? 'default' : (action.variant || 'outline')}
+                                size="sm"
+                                className={`h-8 text-xs gap-2 transition-colors ${
+                                  isLocked 
+                                    ? 'opacity-40 pointer-events-none bg-muted/20' 
+                                    : isSelected 
+                                      ? 'bg-primary text-primary-foreground border-primary' 
+                                      : ''
+                                }`}
+                                disabled={action.disabled || isLocked}
+                                onClick={() => handleSuggestedActionClick(action.id, action.onClick)}
+                              >
+                                {action.icon && action.icon}
+                                {action.label}
+                              </Button>
+                            );
+                          })}
                         </div>
                       </div>
                     )}

@@ -15,11 +15,15 @@ This is a React + TypeScript application for LeadExec AI Assistant - a conversat
 /components/
   /ui/           - Base shadcn/ui components
   /ui-modules/   - Custom business logic modules (Table, Form, Steps, etc.)
+    /shared/     - Shared module system architecture
+      types.ts         - TypeScript interfaces and constants
+      ModuleContainer  - Universal module wrapper component
+      ModuleHeader     - Consistent header component
+      ModuleStates     - Error, empty, and action state components
 /styles/
   globals.css    - Tailwind config and custom utilities
 /services/       - API and utility services
 /guidelines/     - IMPORTANT: Development guidelines and best practices (must read)
-/original/       - Reference implementation (do not modify)
 ```
 
 ## Important Implementation Details
@@ -35,12 +39,25 @@ This is a React + TypeScript application for LeadExec AI Assistant - a conversat
 - Components support `locked` and `disabled` states
 - Use `useCallback` and `useMemo` for performance optimization
 
+### Shared Module System
+- **ModuleContainer**: Universal wrapper providing consistent layout, header, error states, and actions
+- **BaseModule/LockableModule**: TypeScript interfaces that all modules should extend
+- **TYPOGRAPHY & SPACING**: Constants for consistent styling across all modules
+- **ModuleCallbacks**: Standard callback interface for module actions
+- **Usage**: Import from `'./shared'` and extend appropriate interfaces
+
 ### Chat Flow Management
 - ConversationalChat component manages the main chat interface
 - Uses `completedSteps` Set to track workflow progress
 - `currentStep` state tracks the active step
 - Start Over functionality must clear both `completedSteps` and `currentStep`
 - Components check both completed status AND current step for locking
+
+### Message Creation Helpers
+- **addSimpleMessage(content, sender)**: For basic text messages
+- **addAgentResponse(content, component?, suggestedActions?, sources?, stepId?)**: For AI responses with UI modules
+- **Enhanced addMessage**: Supports options object with component, suggestedActions, sources, priority, category
+- **Message Architecture**: Each message can have independent slots for content, UI module, actions, and sources
 
 ### Common Issues & Solutions
 
@@ -65,6 +82,11 @@ npm run preview    # Preview production build
 - [ ] Check responsive design on mobile viewports
 - [ ] Ensure chat flow progresses correctly
 - [ ] Validate form derivation logic works
+- [ ] Verify ModuleContainer provides consistent layout across all modules
+- [ ] Test locking/disabling states work correctly
+- [ ] Ensure TYPOGRAPHY and SPACING constants are applied consistently
+- [ ] Check that suggested actions and UI modules are properly separated
+- [ ] Validate message architecture slots (component, actions, sources) work independently
 
 ## Code Style & Guidelines
 
@@ -92,6 +114,11 @@ The project has comprehensive guidelines in the `/guidelines` directory:
 - Tailwind configured with custom theme tokens
 - TypeScript strict mode enabled
 - Development server typically runs on port 5173
+
+## Migration Notes
+- Backup files (*.backup.tsx) contain previous implementations for reference
+- Original implementations were refactored to use the shared module system
+- All components now follow consistent patterns with ModuleContainer architecture
 
 ## CRITICAL DESIGN PRINCIPLES - REMEMBER THESE ALWAYS
 
@@ -123,11 +150,35 @@ The project has comprehensive guidelines in the `/guidelines` directory:
 - **Follow established architecture** - Don't create new patterns when existing ones work
 - **Reduce code duplication** - Reuse shared foundations and patterns
 
+### Shared Module Implementation Guidelines
+- **Extend interfaces**: All new modules MUST extend `BaseModule` or `LockableModule`
+- **Use ModuleContainer**: Wrap module content in `<ModuleContainer>` for consistent layout
+- **Apply constants**: Use `TYPOGRAPHY` and `SPACING` constants instead of hardcoded classes
+- **Standard props**: Support `disabled`, `locked`, `loading`, `error`, `empty`, `actions`
+- **Example pattern**:
+  ```typescript
+  interface MyModuleProps extends LockableModule, ModuleCallbacks {
+    kind: 'my-module';
+    customProp: string;
+  }
+  
+  export function MyModule({ customProp, onAction, ...baseProps }: MyModuleProps) {
+    return (
+      <ModuleContainer {...baseProps} onAction={onAction}>
+        <div className={SPACING.contentSpacing}>
+          {/* Your module content */}
+        </div>
+      </ModuleContainer>
+    );
+  }
+  ```
+
 ### Suggested Actions Locking (CRITICAL)
-- **LOCK suggested actions when new scenarios start** - Prevent unintentional flow interruption
-- **HIGHLIGHT selected actions** - Show which action was chosen
-- **Same locking logic as modules** - Use flowActive state and completion tracking
-- **Visual consistency** - Locked actions should match locked module appearance
+- **LOCK suggested actions when new scenarios start** - Prevent unintentional flow interruption using `flowActive` state
+- **HIGHLIGHT selected actions** - Actions show persistent selected state with primary variant styling
+- **Same locking logic as modules** - Use `flowActive` state and completion tracking with `selectedActions` Set
+- **Visual consistency** - Locked actions use `opacity-40 pointer-events-none bg-muted/20` styling
+- **Selection persistence** - Selected actions remain highlighted and cannot be clicked again to prevent flow conflicts
 
 ## Future Improvements
 - Add comprehensive error handling
