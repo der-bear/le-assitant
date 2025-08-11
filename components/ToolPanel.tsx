@@ -284,7 +284,7 @@ export function ToolPanel({ selectedTool, onBack }: ToolPanelProps) {
                 <Label htmlFor="tier">Client Tier</Label>
                 <Select value={formData.tier || ''} onValueChange={(value) => updateFormData('tier', value)}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Select tier" />
+                    <SelectValue placeholder="Select..." />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="basic">Basic</SelectItem>
@@ -299,7 +299,7 @@ export function ToolPanel({ selectedTool, onBack }: ToolPanelProps) {
               <Label htmlFor="notes">Notes</Label>
               <Textarea
                 id="notes"
-                placeholder="Additional notes about the client..."
+                placeholder="Notes"
                 value={formData.notes || ''}
                 onChange={(e) => updateFormData('notes', e.target.value)}
                 rows={3}
@@ -329,7 +329,7 @@ export function ToolPanel({ selectedTool, onBack }: ToolPanelProps) {
               <Label htmlFor="sourceName">Source Name</Label>
               <Input
                 id="sourceName"
-                placeholder="e.g., Google Ads, LinkedIn, Content Marketing"
+                placeholder="Source name"
                 value={formData.sourceName || ''}
                 onChange={(e) => updateFormData('sourceName', e.target.value)}
                 required
@@ -340,7 +340,7 @@ export function ToolPanel({ selectedTool, onBack }: ToolPanelProps) {
               <Label htmlFor="sourceType">Source Type</Label>
               <Select value={formData.sourceType || ''} onValueChange={(value) => updateFormData('sourceType', value)}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select source type" />
+                  <SelectValue placeholder="Select..." />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="paid-ads">Paid Advertising</SelectItem>
@@ -381,7 +381,7 @@ export function ToolPanel({ selectedTool, onBack }: ToolPanelProps) {
               <Label htmlFor="trackingUrl">Tracking URL (Optional)</Label>
               <Input
                 id="trackingUrl"
-                placeholder="https://example.com/utm_source=..."
+                placeholder="Tracking URL"
                 value={formData.trackingUrl || ''}
                 onChange={(e) => updateFormData('trackingUrl', e.target.value)}
               />
@@ -391,7 +391,7 @@ export function ToolPanel({ selectedTool, onBack }: ToolPanelProps) {
               <Label htmlFor="description">Description</Label>
               <Textarea
                 id="description"
-                placeholder="Describe this lead source and your strategy..."
+                placeholder="Description"
                 value={formData.description || ''}
                 onChange={(e) => updateFormData('description', e.target.value)}
                 rows={3}

@@ -224,7 +224,7 @@ export function ClientSelector({
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search by company name, email, or tags..."
+                  placeholder="Search clients..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-9 text-sm font-normal"
@@ -313,7 +313,7 @@ export function ClientSelector({
             <div>
               <label className="text-xs font-medium mb-1 block">Tags</label>
               <Input
-                placeholder="Search by tags..."
+                placeholder="Tags..."
                 value={tagFilter}
                 onChange={(e) => setTagFilter(e.target.value)}
                 className="text-sm font-normal"

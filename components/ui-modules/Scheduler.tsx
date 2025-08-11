@@ -107,7 +107,7 @@ export function Scheduler({
               </Label>
               <Input
                 id="eventTitle"
-                placeholder={`Enter ${type} title`}
+                placeholder="Title"
                 value={eventTitle}
                 onChange={(e) => setEventTitle(e.target.value)}
                 className="text-sm font-normal"
@@ -162,7 +162,7 @@ export function Scheduler({
                   </Label>
                   <Input
                     id="location"
-                    placeholder="Meeting location or video link"
+                    placeholder="Location"
                     value={location}
                     onChange={(e) => setLocation(e.target.value)}
                     className="text-sm font-normal"
@@ -176,7 +176,7 @@ export function Scheduler({
                   </Label>
                   <Input
                     id="attendees"
-                    placeholder="Email addresses, comma separated"
+                    placeholder="Email addresses"
                     value={attendees}
                     onChange={(e) => setAttendees(e.target.value)}
                     className="text-sm font-normal"
@@ -191,7 +191,7 @@ export function Scheduler({
               </Label>
               <Input
                 id="description"
-                placeholder={`Additional details about this ${type}`}
+                placeholder="Details"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 className="text-sm font-normal"

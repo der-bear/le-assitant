@@ -532,7 +532,7 @@ export function Form({
               onValueChange={(value) => handleFieldChange(field.id, value)}
             >
               <SelectTrigger className={fieldError ? 'border-destructive' : ''}>
-                <SelectValue placeholder="Select an option" />
+                <SelectValue placeholder="Select..." />
               </SelectTrigger>
               <SelectContent>
                 {field.options.map((option) => (

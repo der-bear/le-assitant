@@ -2782,7 +2782,7 @@ export function ConversationalChat({
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               onKeyPress={handleKeyPress}
-              placeholder={isProcessing ? 'Please wait...' : 'Ask me about clients, or try: "Show me Acme Corp clients"...'}
+              placeholder={isProcessing ? 'Please wait...' : 'Ask me...'}
               disabled={isProcessing}
               className="flex-1 font-normal text-base"
             />

@@ -176,7 +176,7 @@ export function LeadExecClientFlow({ onComplete, onBack }: LeadExecClientFlowPro
               <Label htmlFor="companyName">Company Name</Label>
               <Input
                 id="companyName"
-                placeholder="Enter the company name"
+                placeholder="Company name"
                 value={clientData.companyName}
                 onChange={(e) => updateClientData({ companyName: e.target.value })}
                 required
@@ -188,7 +188,7 @@ export function LeadExecClientFlow({ onComplete, onBack }: LeadExecClientFlowPro
               <Input
                 id="email"
                 type="email"
-                placeholder="Enter a unique email address for this client"
+                placeholder="Client email"
                 value={clientData.email}
                 onChange={(e) => handleEmailChange(e.target.value)}
                 required
@@ -354,7 +354,7 @@ export function LeadExecClientFlow({ onComplete, onBack }: LeadExecClientFlowPro
                 onValueChange={(value) => updateDeliveryMethod({ type: value as any })}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select delivery method" />
+                  <SelectValue placeholder="Select..." />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="email">
@@ -401,7 +401,7 @@ export function LeadExecClientFlow({ onComplete, onBack }: LeadExecClientFlowPro
                     <Label htmlFor="excludedFields">Excluded Fields</Label>
                     <Textarea
                       id="excludedFields"
-                      placeholder="Enter fields to exclude (comma-separated)"
+                      placeholder="Comma-separated fields"
                       value={clientData.deliveryMethod?.excludedFields || ''}
                       onChange={(e) => updateDeliveryMethod({ excludedFields: e.target.value })}
                     />
@@ -431,7 +431,7 @@ export function LeadExecClientFlow({ onComplete, onBack }: LeadExecClientFlowPro
                     <Label htmlFor="scheduleDetails">Schedule Details</Label>
                     <Textarea
                       id="scheduleDetails"
-                      placeholder="Enter schedule details..."
+                      placeholder="Schedule details"
                       value={clientData.deliveryMethod?.scheduleDetails || ''}
                       onChange={(e) => updateDeliveryMethod({ scheduleDetails: e.target.value })}
                     />
@@ -597,7 +597,7 @@ export function LeadExecClientFlow({ onComplete, onBack }: LeadExecClientFlowPro
               <Label htmlFor="criteria">Additional Criteria</Label>
               <Textarea
                 id="criteria"
-                placeholder="Enter any criteria filters (e.g., state, zip, lead field filters)"
+                placeholder="Filter criteria"
                 value={clientData.deliveryAccount?.criteria || ''}
                 onChange={(e) => updateDeliveryAccount({ criteria: e.target.value })}
                 rows={3}

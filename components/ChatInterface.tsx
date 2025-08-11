@@ -305,7 +305,7 @@ export function ChatInterface({ onToolSelect, availableTools }: ChatInterfacePro
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyPress={handleKeyPress}
-            placeholder="Ask me about creating clients, setting up delivery methods, or managing leads..."
+            placeholder="Ask me..."
             className="flex-1"
           />
           <Button onClick={handleSendMessage} disabled={!inputValue.trim()}>
