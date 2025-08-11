@@ -51,6 +51,7 @@ export function ConversationalChat({
   selectedTool, 
   onToolProcessed, 
   onShowAllTools,
+  onStartOver,
   onWelcomeComplete,
   resetTrigger
 }: ConversationalChatProps) {
@@ -64,6 +65,7 @@ export function ConversationalChat({
   const [flowActive, setFlowActive] = useState(false);
   const [currentStep, setCurrentStep] = useState<string | null>(null);
   const [selectedActions, setSelectedActions] = useState<Set<string>>(new Set());
+  const [clientEmail, setClientEmail] = useState<string>('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Session + timers guard to prevent late async inserts after reset or flow changes
@@ -181,6 +183,7 @@ export function ConversationalChat({
     clearDerivedValues();
     setCurrentStep(null);
     setSelectedActions(new Set());
+    setClientEmail('');
     // Update messages to unlock all locked components
     setMessages(prev => prev.map(msg => ({
       ...msg,
@@ -320,6 +323,8 @@ export function ConversationalChat({
   const startGuidedFlow = useCallback((flowId: string) => {
     if (flowId === 'create-new-client') {
       handleClientSetup();
+    } else if (flowId === 'create-new-client-draft') {
+      handleClientSetupDraft();
     } else if (flowId === 'bulk-client-upload') {
       handleBulkUpload();
     } else {
@@ -1142,6 +1147,10 @@ export function ConversationalChat({
     const { companyName, contactEmail } = data;
     addSimpleMessage(`Company: ${companyName}, Email: ${contactEmail}`, 'user');
     
+    // Store client email for later use
+    console.log('📧 Setting clientEmail to:', contactEmail);
+    setClientEmail(contactEmail);
+    
     clearDerivedValues();
     markStepCompleted('adv-basic-info');
     setCurrentStep('adv-delivery-method');
@@ -1542,6 +1551,1554 @@ export function ConversationalChat({
       setFlowActive(false);
     }, 1500);
   }, [addSimpleMessage, markStepCompleted, addProcessingMessage, addAgentResponse, schedule, handleToolSelection, handleStartOver]);
+
+  // ===== DRAFT CLIENT SETUP FLOW =====
+  const handleClientSetupDraft = useCallback(() => {
+    addMessage(
+      'I\'ll guide you through the LeadExec client setup process. Here\'s what we\'ll accomplish together:',
+      'assistant',
+      {
+        component: (
+          <div className="space-y-4">
+            <Steps
+              kind="steps"
+              variant="overview"
+              steps={CLIENT_SETUP_STEPS}
+              title="Client Setup Process (Draft)"
+              showIndex={true}
+              locked={false}
+            />
+            <Button 
+              onClick={() => proceedToBasicInfoDraft()} 
+              className="gap-2 font-medium"
+              disabled={false}
+            >
+              <ArrowRight className="w-4 h-4" />
+              Start Setup
+            </Button>
+          </div>
+        ),
+        stepId: 'setup-overview'
+      }
+    );
+  }, [addMessage]);
+
+  const proceedToBasicInfoDraft = useCallback(() => {
+    addSimpleMessage('Start Setup', 'user');
+    
+    // Mark setup overview as completed
+    markStepCompleted('setup-overview');
+    setCurrentStep('basic-info');
+    
+    schedule(() => {
+      // Reset derived values for new form
+      clearDerivedValues();
+      
+      const formFields: FormField[] = [
+        { 
+          id: 'companyName', 
+          label: 'Company Name', 
+          type: 'text' as const, 
+          required: true, 
+          placeholder: 'Enter company name' 
+        },
+        { 
+          id: 'email', 
+          label: 'Email Address', 
+          type: 'email' as const, 
+          required: true, 
+          placeholder: 'Enter email address' 
+        }
+      ];
+
+      const credentialsSection: FormSection = {
+        id: 'credentials',
+        title: 'Client Credentials',
+        description: 'Username and password will be auto-generated when you enter a valid email',
+        fields: [
+          {
+            id: 'username',
+            label: 'Username',
+            type: 'text' as const,
+            value: '',
+            required: false,
+            placeholder: 'Will be generated from email address'
+          },
+          {
+            id: 'tempPassword',
+            label: 'Password',
+            type: 'text' as const,
+            value: '',
+            required: false,
+            placeholder: 'Will be auto-generated securely'
+          }
+        ]
+      };
+
+      const validationRules: ValidationRule[] = [
+        {
+          fieldId: 'companyName',
+          rule: 'required' as const,
+          message: 'Company name is required'
+        },
+        {
+          fieldId: 'email',
+          rule: 'required' as const,
+          message: 'Email address is required'
+        },
+        {
+          fieldId: 'email',
+          rule: 'regex' as const,
+          pattern: '^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$',
+          message: 'Please enter a valid email address'
+        }
+      ];
+
+      addAgentResponse(
+        "Let's start with the basic information. Enter the company details and we'll auto-generate secure login credentials:",
+        <Form
+          kind="form"
+          title="Client Information"
+          description="Basic client details and auto-generated credentials"
+          sections={[
+            { id: 'basic', fields: formFields },
+            credentialsSection
+          ]}
+          validations={validationRules}
+          derive={[
+            {
+              fieldId: 'username',
+              from: ['email'],
+              strategy: 'usernameFromEmail',
+              editable: true
+            },
+            {
+              fieldId: 'tempPassword',
+              from: ['email'],
+              strategy: 'strongPassword', 
+              editable: true
+            }
+          ]}
+          submitLabel="Continue"
+          onSubmit={handleBasicInfoSubmitDraft}
+          onRequestDerive={handleDerive}
+          derivedValues={derivedValues}
+          disabled={completedSteps.has('basic-info') && currentStep !== 'basic-info'}
+          locked={completedSteps.has('basic-info') && currentStep !== 'basic-info'}
+        />,
+        undefined,
+        undefined,
+        'basic-info'
+      );
+    }, 500);
+  }, [addSimpleMessage, markStepCompleted, addAgentResponse, completedSteps, currentStep, schedule, handleDerive, derivedValues, clearDerivedValues]);
+
+  const handleBasicInfoSubmitDraft = useCallback((data: Record<string, any>) => {
+    const { companyName, email, username, tempPassword } = data;
+    addSimpleMessage(`${companyName} (${email})`, 'user');
+    
+    // Store client email for later use
+    console.log('📧 Setting clientEmail to:', email);
+    setClientEmail(email);
+    
+    clearDerivedValues();
+    markStepCompleted('basic-info');
+    setCurrentStep('delivery-method');
+    
+    schedule(() => {
+      addAgentResponse(
+        "Great! Now let's configure how leads will be delivered to this client:",
+        <ChoiceList
+          kind="choices"
+          title="Choose Delivery Method"
+          description="Select how you want leads sent to this client"
+          options={DELIVERY_OPTIONS}
+          mode="single"
+          layout="card"
+          onChange={(value) => handleDeliveryMethodSelectDraft(value as string)}
+          disabled={completedSteps.has('delivery-method') && currentStep !== 'delivery-method'}
+          locked={completedSteps.has('delivery-method') && currentStep !== 'delivery-method'}
+        />,
+        undefined,
+        undefined,
+        'delivery-method'
+      );
+    }, 500);
+  }, [addSimpleMessage, markStepCompleted, addAgentResponse, completedSteps, currentStep, schedule, clearDerivedValues]);
+
+  const handleDeliveryMethodSelectDraft = useCallback((method: string) => {
+    addSimpleMessage(`Selected: ${DELIVERY_METHOD_LABELS[method] || method}`, 'user');
+    
+    // Mark delivery method step as completed
+    markStepCompleted('delivery-method');
+    setCurrentStep('delivery-config');
+    
+    schedule(() => {
+      // Step 2b: Email delivery - use client email by default, then ask questions
+      if (method === 'email') {
+        // First question: Field mappings
+        addAgentResponse(
+          'I\'ll use the client email by default for delivery. Should I use all the lead type mappings, or exclude some fields?',
+          <ChoiceList
+            kind="choices"
+            title="Lead Field Mappings"
+            description="Choose how to handle lead data fields"
+            options={[
+              {
+                id: 'all',
+                label: 'Use All Lead Fields',
+                description: 'Include all available lead data in delivery'
+              },
+              {
+                id: 'exclude',
+                label: 'Exclude Some Fields',
+                description: 'Specify which fields to exclude from delivery'
+              }
+            ]}
+            mode="single"
+            layout="card"
+            onChange={(value) => handleFieldMappingChoiceDraft(value as string)}
+            disabled={completedSteps.has('field-mapping') && currentStep !== 'field-mapping'}
+            locked={completedSteps.has('field-mapping') && currentStep !== 'field-mapping'}
+          />,
+          undefined,
+          undefined,
+          'field-mapping'
+        );
+      } else if (method === 'webhook') {
+        // First ask for basic webhook details
+        addMessage(
+          'Configure your webhook endpoint details.',
+          'assistant',
+          {
+            component: (
+              <Form
+                kind="form"
+                title="Webhook Basic Configuration"
+                description="Set up your webhook endpoint"
+                fields={[
+                  {
+                    id: 'webhookUrl',
+                    label: 'Webhook URL',
+                    type: 'url' as const,
+                    required: true,
+                    placeholder: 'https://client.example.com/webhook/leads'
+                  },
+                  {
+                    id: 'webhookSecret',
+                    label: 'Webhook Secret (optional)',
+                    type: 'password' as const,
+                    placeholder: 'Optional authentication secret'
+                  },
+                  {
+                    id: 'webhookMethod',
+                    label: 'HTTP Method',
+                    type: 'select' as const,
+                    required: true,
+                    value: 'POST',
+                    options: [
+                      { value: 'POST', label: 'POST' },
+                      { value: 'PUT', label: 'PUT' }
+                    ]
+                  }
+                ]}
+                validations={[
+                  {
+                    fieldId: 'webhookUrl',
+                    rule: 'required' as const,
+                    message: 'Webhook URL is required'
+                  },
+                  {
+                    fieldId: 'webhookUrl',
+                    rule: 'regex' as const,
+                    pattern: '^https?://[^\\s]+$',
+                    message: 'Please enter a valid URL'
+                  }
+                ]}
+                submitLabel="Continue"
+                onSubmit={handleWebhookBasicConfigSubmitDraft}
+                disabled={completedSteps.has('webhook-basic') && currentStep !== 'webhook-basic'}
+                locked={completedSteps.has('webhook-basic') && currentStep !== 'webhook-basic'}
+              />
+            ),
+            stepId: 'webhook-basic'
+          }
+        );
+      } else if (method === 'ftp') {
+        addMessage(
+          'Upload an FTP template file or use our default format.',
+          'assistant',
+          {
+            component: (
+              <div className="space-y-6">
+                <FileDrop
+                  kind="filedrop"
+                  title="FTP Configuration Template"
+                  description="Upload your FTP configuration template"
+                  accept=".csv,.xlsx,.xml"
+                  multiple={false}
+                  maxSizeMb={5}
+                />
+                <div className="flex gap-3">
+                  <Button onClick={() => handleDeliveryConfigSubmitDraft({ useDefault: true })} className="font-medium">
+                    Continue
+                  </Button>
+                </div>
+              </div>
+            ),
+            stepId: 'delivery-config'
+          }
+        );
+      } else if (method === 'pingpost') {
+        addMessage(
+          'Configure ping post settings for real-time lead validation.',
+          'assistant',
+          {
+            component: (
+              <Form
+                kind="form"
+                title="Ping Post Configuration"
+                description="Set up real-time lead validation and delivery"
+                fields={[
+                  {
+                    id: 'pingUrl',
+                    label: 'Ping URL',
+                    type: 'url' as const,
+                    required: true,
+                    placeholder: 'https://client.example.com/ping'
+                  },
+                  {
+                    id: 'postUrl',
+                    label: 'Post URL',
+                    type: 'url' as const,
+                    required: true,
+                    placeholder: 'https://client.example.com/post'
+                  },
+                  {
+                    id: 'timeout',
+                    label: 'Timeout (seconds)',
+                    type: 'number' as const,
+                    value: 30,
+                    min: 5,
+                    max: 300
+                  }
+                ]}
+                validations={[
+                  {
+                    fieldId: 'pingUrl',
+                    rule: 'required' as const,
+                    message: 'Ping URL is required'
+                  },
+                  {
+                    fieldId: 'postUrl',
+                    rule: 'required' as const,
+                    message: 'Post URL is required'
+                  }
+                ]}
+                submitLabel="Continue to Configuration"
+                onSubmit={handleDeliveryConfigSubmitDraft}
+                disabled={completedSteps.has('delivery-config') && currentStep !== 'delivery-config'}
+                locked={completedSteps.has('delivery-config') && currentStep !== 'delivery-config'}
+              />
+            ),
+            stepId: 'delivery-config'
+          }
+        );
+      } else {
+        // Skip delivery configuration
+        handleDeliveryConfigSubmitDraft({ skipped: true });
+      }
+    }, 500);
+  }, [addMessage, markStepCompleted, completedSteps, currentStep, schedule]);
+
+  const handleFieldMappingChoiceDraft = useCallback((choice: string) => {
+    addSimpleMessage(choice === 'all' ? 'Use All Lead Fields' : 'Exclude Some Fields', 'user');
+    markStepCompleted('field-mapping');
+    setCurrentStep('template-choice');
+    
+    schedule(() => {
+      // If they want to exclude fields, ask for exclusions first
+      if (choice === 'exclude') {
+        addMessage(
+          'Please specify which fields to exclude from delivery.',
+          'assistant',
+          {
+            component: (
+              <Form
+                kind="form"
+                title="Field Exclusions"
+                description="Enter fields to exclude from lead delivery"
+                fields={[
+                  {
+                    id: 'excludedFields',
+                    label: 'Fields to Exclude (comma-separated)',
+                    type: 'text' as const,
+                    placeholder: 'e.g., ssn, phone, internal_notes',
+                    required: true
+                  }
+                ]}
+                submitLabel="Continue"
+                onSubmit={() => handleFieldExclusionSubmitDraft()}
+              />
+            ),
+            stepId: 'field-exclusions'
+          }
+        );
+      } else {
+        // Skip to template question
+        handleTemplateQuestionDraft();
+      }
+    }, 500);
+  }, [addSimpleMessage, markStepCompleted, addMessage, schedule]);
+
+  const handleFieldExclusionSubmitDraft = useCallback(() => {
+    addSimpleMessage('Field exclusions saved', 'user');
+    handleTemplateQuestionDraft();
+  }, [addSimpleMessage]);
+
+  const handleTemplateQuestionDraft = useCallback(() => {
+    schedule(() => {
+      addAgentResponse(
+        'Would you like to use a generic email template or upload a custom one?',
+        <ChoiceList
+          kind="choices"
+          title="Email Template"
+          description="Choose template type for lead delivery emails"
+          options={[
+            {
+              id: 'generic',
+              label: 'Generic Template',
+              description: 'Use our standard email template'
+            },
+            {
+              id: 'custom',
+              label: 'Custom Template',
+              description: 'Upload your own email template'
+            }
+          ]}
+          mode="single"
+          layout="card"
+          onChange={(value) => handleTemplateChoiceDraft(value as string)}
+          disabled={completedSteps.has('template-choice') && currentStep !== 'template-choice'}
+          locked={completedSteps.has('template-choice') && currentStep !== 'template-choice'}
+        />,
+        undefined,
+        undefined,
+        'template-choice'
+      );
+    }, 500);
+  }, [addAgentResponse, completedSteps, currentStep, schedule]);
+
+  const handleTemplateChoiceDraft = useCallback((choice: string) => {
+    addSimpleMessage(choice === 'generic' ? 'Generic Template' : 'Custom Template', 'user');
+    markStepCompleted('template-choice');
+    setCurrentStep('schedule-question');
+    
+    schedule(() => {
+      if (choice === 'custom') {
+        // Show file upload then continue
+        addMessage(
+          'Please upload your custom email template.',
+          'assistant',
+          {
+            component: (
+              <FileDrop
+                kind="filedrop"
+                title="Upload Email Template"
+                description="Upload your custom template file"
+                accept=".html,.htm,.txt"
+                multiple={false}
+                maxSizeMb={5}
+              />
+            ),
+            stepId: 'template-upload'
+          }
+        );
+        
+        // Auto-continue after upload simulation
+        schedule(() => {
+          addSimpleMessage('Template uploaded', 'user');
+          handleScheduleQuestionDraft();
+        }, 2000);
+      } else {
+        handleScheduleQuestionDraft();
+      }
+    }, 500);
+  }, [addSimpleMessage, markStepCompleted, addMessage, schedule]);
+
+  const handleScheduleQuestionDraft = useCallback(() => {
+    schedule(() => {
+      addAgentResponse(
+        'Should this delivery method follow a delivery schedule?',
+        <ChoiceList
+          kind="choices"
+          title="Delivery Schedule"
+          description="Set up when leads should be delivered"
+          options={[
+            {
+              id: 'yes',
+              label: 'Yes, Set Schedule',
+              description: 'Configure specific delivery times'
+            },
+            {
+              id: 'no',
+              label: 'No, Deliver Immediately',
+              description: 'Send leads as they arrive'
+            }
+          ]}
+          mode="single"
+          layout="card"
+          onChange={(value) => handleScheduleChoiceDraft(value as string)}
+          disabled={completedSteps.has('schedule-question') && currentStep !== 'schedule-question'}
+          locked={completedSteps.has('schedule-question') && currentStep !== 'schedule-question'}
+        />,
+        undefined,
+        undefined,
+        'schedule-question'
+      );
+    }, 500);
+  }, [addAgentResponse, completedSteps, currentStep, schedule]);
+
+  const handleScheduleChoiceDraft = useCallback((choice: string) => {
+    addSimpleMessage(choice === 'yes' ? 'Yes, Set Schedule' : 'No, Deliver Immediately', 'user');
+    markStepCompleted('schedule-question');
+    setCurrentStep(choice === 'yes' ? 'schedule-details' : 'retry-question');
+    
+    schedule(() => {
+      if (choice === 'yes') {
+        // Ask for schedule details
+        addMessage(
+          'Please provide the delivery schedule details.',
+          'assistant',
+          {
+            component: (
+              <Form
+                kind="form"
+                title="Schedule Details"
+                description="When should leads be delivered?"
+                fields={[
+                  {
+                    id: 'scheduleDetails',
+                    label: 'Schedule Details',
+                    type: 'text' as const,
+                    placeholder: 'e.g., Mon-Fri 9AM-5PM EST',
+                    required: true
+                  }
+                ]}
+                submitLabel="Continue"
+                onSubmit={() => handleScheduleDetailsSubmitDraft()}
+              />
+            ),
+            stepId: 'schedule-details'
+          }
+        );
+      } else {
+        handleRetryQuestionDraft();
+      }
+    }, 500);
+  }, [addSimpleMessage, markStepCompleted, addMessage, schedule]);
+
+  const handleScheduleDetailsSubmitDraft = useCallback(() => {
+    addSimpleMessage('Schedule details saved', 'user');
+    markStepCompleted('schedule-details');
+    handleRetryQuestionDraft();
+  }, [addSimpleMessage, markStepCompleted]);
+
+  const handleRetryQuestionDraft = useCallback(() => {
+    schedule(() => {
+      addAgentResponse(
+        'Should there be retry logic if delivery fails?',
+        <ChoiceList
+          kind="choices"
+          title="Retry Logic"
+          description="Handle delivery failures automatically"
+          options={[
+            {
+              id: 'yes',
+              label: 'Yes, Enable Retry',
+              description: 'Automatically retry failed deliveries'
+            },
+            {
+              id: 'no',
+              label: 'No, Single Attempt',
+              description: 'Only attempt delivery once'
+            }
+          ]}
+          mode="single"
+          layout="card"
+          onChange={(value) => handleRetryChoiceDraft(value as string)}
+          disabled={completedSteps.has('retry-question') && currentStep !== 'retry-question'}
+          locked={completedSteps.has('retry-question') && currentStep !== 'retry-question'}
+        />,
+        undefined,
+        undefined,
+        'retry-question'
+      );
+    }, 500);
+  }, [addAgentResponse, completedSteps, currentStep, schedule]);
+
+  const handleRetryChoiceDraft = useCallback((choice: string) => {
+    addSimpleMessage(choice === 'yes' ? 'Yes, Enable Retry' : 'No, Single Attempt', 'user');
+    markStepCompleted('retry-question');
+    setCurrentStep(choice === 'yes' ? 'retry-details' : 'notification-question');
+    
+    schedule(() => {
+      if (choice === 'yes') {
+        // Ask for retry details
+        addMessage(
+          'Configure retry settings for failed deliveries.',
+          'assistant',
+          {
+            component: (
+              <Form
+                kind="form"
+                title="Retry Configuration"
+                description="How should failed deliveries be retried?"
+                fields={[
+                  {
+                    id: 'retryAttempts',
+                    label: 'Max Retry Attempts',
+                    type: 'number' as const,
+                    value: 3,
+                    min: 1,
+                    max: 10,
+                    required: true
+                  },
+                  {
+                    id: 'retryInterval',
+                    label: 'Retry Interval (minutes)',
+                    type: 'number' as const,
+                    value: 15,
+                    min: 1,
+                    max: 1440,
+                    required: true
+                  }
+                ]}
+                submitLabel="Continue"
+                onSubmit={() => handleRetryDetailsSubmitDraft()}
+              />
+            ),
+            stepId: 'retry-details'
+          }
+        );
+      } else {
+        handleNotificationQuestionDraft();
+      }
+    }, 500);
+  }, [addSimpleMessage, markStepCompleted, addMessage, schedule]);
+
+  const handleRetryDetailsSubmitDraft = useCallback(() => {
+    addSimpleMessage('Retry settings saved', 'user');
+    markStepCompleted('retry-details');
+    handleNotificationQuestionDraft();
+  }, [addSimpleMessage, markStepCompleted]);
+
+  const handleNotificationQuestionDraft = useCallback(() => {
+    schedule(() => {
+      addAgentResponse(
+        'Should we notify the account owner on delivery failures?',
+        <ChoiceList
+          kind="choices"
+          title="Failure Notifications"
+          description="Get notified when deliveries fail"
+          options={[
+            {
+              id: 'yes',
+              label: 'Yes, Send Notifications',
+              description: 'Email alerts for delivery failures'
+            },
+            {
+              id: 'no',
+              label: 'No Notifications',
+              description: 'Handle failures silently'
+            }
+          ]}
+          mode="single"
+          layout="card"
+          onChange={(value) => handleNotificationChoiceDraft(value as string)}
+          disabled={completedSteps.has('notification-question') && currentStep !== 'notification-question'}
+          locked={completedSteps.has('notification-question') && currentStep !== 'notification-question'}
+        />,
+        undefined,
+        undefined,
+        'notification-question'
+      );
+    }, 500);
+  }, [addAgentResponse, completedSteps, currentStep, schedule]);
+
+  const handleNotificationChoiceDraft = useCallback((choice: string) => {
+    addSimpleMessage(choice === 'yes' ? 'Yes, Send Notifications' : 'No Notifications', 'user');
+    markStepCompleted('notification-question');
+    setCurrentStep(choice === 'yes' ? 'notification-details' : 'delivery-summary');
+    
+    if (choice === 'yes') {
+      // Ask for notification recipient - use current clientEmail state
+      schedule(() => {
+        console.log('🔍 Creating notification form with clientEmail:', clientEmail);
+        addMessage(
+          'Who should receive the failure notifications?',
+          'assistant',
+          {
+            component: (
+              <Form
+                key={`notification-form-${Date.now()}`}
+                kind="form"
+                title="Notification Recipient"
+                description="Email address for delivery failure alerts"
+                fields={[
+                  {
+                    id: 'notificationEmail',
+                    label: 'Notification Email',
+                    type: 'email' as const,
+                    placeholder: clientEmail || 'admin@company.com',
+                    value: clientEmail || '',
+                    required: true
+                  }
+                ]}
+                validations={[
+                  {
+                    fieldId: 'notificationEmail',
+                    rule: 'required' as const,
+                    message: 'Email address is required'
+                  }
+                ]}
+                submitLabel="Continue"
+                onSubmit={(data) => {
+                  console.log('📧 Notification form submitted with:', data);
+                  handleNotificationDetailsSubmitDraft();
+                }}
+              />
+            ),
+            stepId: 'notification-details'
+          }
+        );
+      }, 500);
+    } else {
+      // Skip pointless summary, go directly to delivery account question
+      markStepCompleted('delivery-config');
+      setCurrentStep('delivery-account-choice');
+      
+      schedule(() => {
+        addAgentResponse(
+            'Would you like to create a delivery account for this client?',
+            <ChoiceList
+              kind="choices"
+              title="Delivery Account Setup"
+              description="Choose whether to set up delivery account now or later"
+              options={[
+                {
+                  id: 'yes',
+                  label: 'Yes, Create Delivery Account',
+                  description: 'Set up account limits, revenue requirements, and filtering'
+                },
+                {
+                  id: 'no',
+                  label: 'No, Skip for Now',
+                  description: 'Create the client without delivery account (can be added later)'
+                }
+              ]}
+              mode="single"
+              layout="card"
+              onChange={(value) => {
+                if (value === 'yes') {
+                  handleDeliveryAccountSetupDraft();
+                } else {
+                  handleSkipDeliveryAccountDraft();
+                }
+              }}
+              disabled={completedSteps.has('delivery-account-choice') && currentStep !== 'delivery-account-choice'}
+              locked={completedSteps.has('delivery-account-choice') && currentStep !== 'delivery-account-choice'}
+            />,
+            undefined,
+            undefined,
+            'delivery-account-choice'
+          );
+      }, 500);
+    }
+  }, [addSimpleMessage, markStepCompleted, addMessage, schedule, clientEmail]);
+
+  const handleWebhookBasicConfigSubmitDraft = useCallback((config: Record<string, any>) => {
+    addSimpleMessage('Webhook details saved', 'user');
+    markStepCompleted('webhook-basic');
+    setCurrentStep('webhook-field-mapping');
+    
+    schedule(() => {
+      addAgentResponse(
+        'Do you need custom field mapping for this webhook? Third-party platforms often have different field names.',
+        <ChoiceList
+          kind="choices"
+          title="Field Mapping"
+          description="Configure how lead fields are mapped to your webhook"
+          options={[
+            {
+              id: 'yes',
+              label: 'Yes, Need Mapping',
+              description: 'Upload CSV with field mappings or set up custom mapping'
+            },
+            {
+              id: 'no',
+              label: 'No, Use Default',
+              description: 'Use standard LeadExec field names'
+            }
+          ]}
+          mode="single"
+          layout="card"
+          onChange={(value) => handleWebhookFieldMappingChoiceDraft(value as string)}
+          disabled={completedSteps.has('webhook-field-mapping') && currentStep !== 'webhook-field-mapping'}
+          locked={completedSteps.has('webhook-field-mapping') && currentStep !== 'webhook-field-mapping'}
+        />,
+        undefined,
+        undefined,
+        'webhook-field-mapping'
+      );
+    }, 500);
+  }, [addSimpleMessage, markStepCompleted, addAgentResponse, completedSteps, currentStep, schedule]);
+
+  const handleWebhookFieldMappingChoiceDraft = useCallback((choice: string) => {
+    addSimpleMessage(choice === 'yes' ? 'Yes, Need Mapping' : 'No, Use Default', 'user');
+    markStepCompleted('webhook-field-mapping');
+    setCurrentStep('webhook-mapping-details');
+    
+    schedule(() => {
+      if (choice === 'yes') {
+        addMessage(
+          'Upload a CSV file with field mappings or let our AI process auto-mapping.',
+          'assistant',
+          {
+            component: (
+              <div className="space-y-4">
+                <FileDrop
+                  kind="filedrop"
+                  title="Upload Field Mapping File"
+                  description="Upload CSV with field mappings (LeadExec_Field, Your_Field)"
+                  accept=".csv,.xlsx"
+                  multiple={false}
+                  maxSizeMb={5}
+                />
+                <div className="flex gap-3">
+                  <Button onClick={() => handleWebhookMappingSubmitDraft()} className="font-medium">
+                    Auto-Map
+                  </Button>
+                  <Button variant="outline" onClick={() => handleWebhookMappingSubmitDraft()} className="font-medium">
+                    Skip For Now
+                  </Button>
+                </div>
+              </div>
+            ),
+            stepId: 'webhook-mapping-details'
+          }
+        );
+      } else {
+        handleWebhookMappingSubmitDraft();
+      }
+    }, 500);
+  }, [addSimpleMessage, markStepCompleted, addMessage, schedule]);
+
+  const handleWebhookMappingSubmitDraft = useCallback(() => {
+    addSimpleMessage('Field mapping configured', 'user');
+    markStepCompleted('webhook-mapping-details');
+    
+    // Continue to schedule question (same as email flow)
+    handleScheduleQuestionDraft();
+  }, [addSimpleMessage, markStepCompleted]);
+
+  const handleNotificationDetailsSubmitDraft = useCallback(() => {
+    addSimpleMessage('Notification settings saved', 'user');
+    markStepCompleted('notification-details');
+    // Skip pointless summary, go directly to delivery account question
+    markStepCompleted('delivery-config');
+    setCurrentStep('delivery-account-choice');
+    
+    schedule(() => {
+      addAgentResponse(
+        'Would you like to create a delivery account for this client?',
+        <ChoiceList
+          kind="choices"
+          title="Delivery Account Setup"
+          description="Choose whether to set up delivery account now or later"
+          options={[
+            {
+              id: 'yes',
+              label: 'Yes, Create Delivery Account',
+              description: 'Set up account limits, revenue requirements, and filtering'
+            },
+            {
+              id: 'no',
+              label: 'No, Skip for Now',
+              description: 'Create the client without delivery account (can be added later)'
+            }
+          ]}
+          mode="single"
+          layout="card"
+          onChange={(value) => {
+            if (value === 'yes') {
+              handleDeliveryAccountSetupDraft();
+            } else {
+              handleSkipDeliveryAccountDraft();
+            }
+          }}
+          disabled={completedSteps.has('delivery-account-choice') && currentStep !== 'delivery-account-choice'}
+          locked={completedSteps.has('delivery-account-choice') && currentStep !== 'delivery-account-choice'}
+        />,
+        undefined,
+        undefined,
+        'delivery-account-choice'
+      );
+    }, 500);
+  }, [addSimpleMessage, markStepCompleted, addAgentResponse, completedSteps, currentStep, schedule]);
+
+  const handleDeliveryConfigSubmitDraft = useCallback((config: Record<string, any>) => {
+    console.log('🔧 handleDeliveryConfigSubmitDraft called with config:', config);
+    addSimpleMessage('Delivery configuration saved', 'user');
+    
+    // Mark delivery configuration as completed
+    markStepCompleted('delivery-config');
+    setCurrentStep('configuration');
+    
+    schedule(() => {
+      console.log('🔧 Adding Configuration form message');
+      // Step 3: Configuration & Creation
+      addMessage(
+        'Configure additional client settings and preferences.',
+        'assistant',
+        {
+          component: (
+            <Form
+              kind="form"
+              title="Client Configuration"
+              description="Set up client preferences and limits"
+              sections={[
+                {
+                  id: 'limits',
+                  title: 'Lead Limits & Pricing',
+                  fields: [
+                    {
+                      id: 'dailyLeadLimit',
+                      label: 'Daily Lead Limit',
+                      type: 'number' as const,
+                      value: 50,
+                      min: 1,
+                      max: 1000,
+                      placeholder: 'Maximum leads per day'
+                    },
+                    {
+                      id: 'leadPrice',
+                      label: 'Price Per Lead ($)',
+                      type: 'number' as const,
+                      value: 25,
+                      min: 1,
+                      placeholder: 'Cost per lead'
+                    }
+                  ]
+                },
+                {
+                  id: 'filtering',
+                  title: 'Lead Filtering',
+                  fields: [
+                    {
+                      id: 'leadTypes',
+                      label: 'Accepted Lead Types',
+                      type: 'select' as const,
+                      required: true,
+                      value: 'all',
+                      options: [
+                        { value: 'all', label: 'All Lead Types' },
+                        { value: 'residential', label: 'Residential Only' },
+                        { value: 'commercial', label: 'Commercial Only' },
+                        { value: 'custom', label: 'Custom Filter' }
+                      ]
+                    },
+                    {
+                      id: 'excludeWeekends',
+                      label: 'Exclude Weekend Leads',
+                      type: 'checkbox' as const,
+                      value: false
+                    }
+                  ]
+                }
+              ]}
+              validations={[
+                {
+                  fieldId: 'notificationEmail',
+                  rule: 'email' as const,
+                  message: 'Please enter a valid email address'
+                }
+              ]}
+              submitLabel="Continue to Delivery Account"
+              onSubmit={handleConfigurationSubmitDraft}
+              disabled={completedSteps.has('configuration') && currentStep !== 'configuration'}
+              locked={completedSteps.has('configuration') && currentStep !== 'configuration'}
+            />
+          ),
+          stepId: 'configuration'
+        }
+      );
+    }, 500);
+  }, [addMessage, markStepCompleted, completedSteps, currentStep, schedule]);
+
+  const handleConfigurationSubmitDraft = useCallback((configData: Record<string, any>) => {
+    addSimpleMessage('Delivery settings saved', 'user');
+    markStepCompleted('configuration');
+    setCurrentStep('delivery-account-choice');
+    
+    schedule(() => {
+      // Step 4: Delivery Account Setup  
+      addAgentResponse(
+        'Would you like to create a delivery account for this client? This will define how leads are allocated and delivered.',
+        <ChoiceList
+          kind="choices"
+          title="Delivery Account Setup"
+          description="Choose whether to set up delivery account now or later"
+          options={[
+            {
+              id: 'yes',
+              label: 'Yes, Create Delivery Account',
+              description: 'Set up account limits, revenue requirements, and filtering'
+            },
+            {
+              id: 'no',
+              label: 'No, Skip for Now',
+              description: 'Create the client without delivery account (can be added later)'
+            }
+          ]}
+          mode="single"
+          layout="card"
+          onChange={(value) => {
+            if (value === 'yes') {
+              handleDeliveryAccountSetupDraft();
+            } else {
+              handleSkipDeliveryAccountDraft();
+            }
+          }}
+          disabled={completedSteps.has('delivery-account-choice') && currentStep !== 'delivery-account-choice'}
+          locked={completedSteps.has('delivery-account-choice') && currentStep !== 'delivery-account-choice'}
+        />,
+        undefined,
+        undefined,
+        'delivery-account-choice'
+      );
+    }, 500);
+  }, [addSimpleMessage, markStepCompleted, addAgentResponse, currentStep, schedule]);
+
+  const handleDeliveryAccountSetupDraft = useCallback(() => {
+    addSimpleMessage('Yes, Create Delivery Account', 'user');
+    markStepCompleted('delivery-account-choice');
+    setCurrentStep('quantity-limits-question');
+    
+    schedule(() => {
+      // Auto-generate account name, then ask about quantity limits
+      addAgentResponse(
+        'I\'ll auto-generate the account name as "TechCorp_Email". Are there any quantity limits for this account?',
+        <ChoiceList
+          kind="choices"
+          title="Quantity Limits"
+          description="Set limits on lead delivery volume"
+          options={[
+            {
+              id: 'yes',
+              label: 'Yes, Set Limits',
+              description: 'Configure hourly, daily, weekly, or monthly limits'
+            },
+            {
+              id: 'no',
+              label: 'No Limits',
+              description: 'Allow unlimited lead delivery'
+            }
+          ]}
+          mode="single"
+          layout="card"
+          onChange={(value) => handleQuantityLimitsChoiceDraft(value as string)}
+          disabled={completedSteps.has('quantity-limits-question') && currentStep !== 'quantity-limits-question'}
+          locked={completedSteps.has('quantity-limits-question') && currentStep !== 'quantity-limits-question'}
+        />,
+        undefined,
+        undefined,
+        'quantity-limits-question'
+      );
+    }, 500);
+  }, [addAgentResponse, markStepCompleted, completedSteps, currentStep, schedule]);
+
+  const handleQuantityLimitsChoiceDraft = useCallback((choice: string) => {
+    addSimpleMessage(choice === 'yes' ? 'Yes, Set Limits' : 'No Limits', 'user');
+    markStepCompleted('quantity-limits-question');
+    setCurrentStep(choice === 'yes' ? 'quantity-limits-details' : 'exclusive-delivery-question');
+    
+    schedule(() => {
+      if (choice === 'yes') {
+        // Show limits form then continue
+        addMessage(
+          'Configure the quantity limits for this account.',
+          'assistant',
+          {
+            component: (
+              <Form
+                kind="form"
+                title="Quantity Limits"
+                description="Set delivery volume limits (leave empty for no limit)"
+                fields={[
+                  {
+                    id: 'dailyLimit',
+                    label: 'Daily Limit',
+                    type: 'number' as const,
+                    value: 50,
+                    min: 0,
+                    required: true
+                  },
+                  {
+                    id: 'hourlyLimit',
+                    label: 'Hourly Limit (optional)',
+                    type: 'number' as const,
+                    min: 0,
+                    placeholder: 'Leave empty for no limit'
+                  },
+                  {
+                    id: 'weeklyLimit',
+                    label: 'Weekly Limit (optional)',
+                    type: 'number' as const,
+                    min: 0,
+                    placeholder: 'Leave empty for no limit'
+                  },
+                  {
+                    id: 'monthlyLimit',
+                    label: 'Monthly Limit (optional)',
+                    type: 'number' as const,
+                    min: 0,
+                    placeholder: 'Leave empty for no limit'
+                  }
+                ]}
+                submitLabel="Continue"
+                onSubmit={() => handleQuantityLimitsSubmitDraft()}
+              />
+            ),
+            stepId: 'quantity-limits-details'
+          }
+        );
+      } else {
+        handleExclusiveDeliveryQuestionDraft();
+      }
+    }, 500);
+  }, [addSimpleMessage, markStepCompleted, addMessage, schedule]);
+
+  const handleQuantityLimitsSubmitDraft = useCallback(() => {
+    addSimpleMessage('Quantity limits saved', 'user');
+    markStepCompleted('quantity-limits-details');
+    handleExclusiveDeliveryQuestionDraft();
+  }, [addSimpleMessage, markStepCompleted]);
+
+  const handleExclusiveDeliveryQuestionDraft = useCallback(() => {
+    schedule(() => {
+      addAgentResponse(
+        'Should this be an exclusive delivery?',
+        <ChoiceList
+          kind="choices"
+          title="Exclusive Delivery"
+          description="Control lead distribution exclusivity"
+          options={[
+            {
+              id: 'yes',
+              label: 'Yes, Exclusive',
+              description: 'No other client receives leads from this batch'
+            },
+            {
+              id: 'no',
+              label: 'No, Shared',
+              description: 'Other clients can receive leads from the same batch'
+            }
+          ]}
+          mode="single"
+          layout="card"
+          onChange={(value) => handleExclusiveDeliveryChoiceDraft(value as string)}
+          disabled={completedSteps.has('exclusive-delivery-question') && currentStep !== 'exclusive-delivery-question'}
+          locked={completedSteps.has('exclusive-delivery-question') && currentStep !== 'exclusive-delivery-question'}
+        />,
+        undefined,
+        undefined,
+        'exclusive-delivery-question'
+      );
+    }, 500);
+  }, [addAgentResponse, completedSteps, currentStep, schedule]);
+
+  const handleExclusiveDeliveryChoiceDraft = useCallback((choice: string) => {
+    addSimpleMessage(choice === 'yes' ? 'Yes, Exclusive' : 'No, Shared', 'user');
+    markStepCompleted('exclusive-delivery-question');
+    setCurrentStep('order-system-question');
+    
+    schedule(() => {
+      addAgentResponse(
+        'Should this account use the order system?',
+        <ChoiceList
+          kind="choices"
+          title="Order System"
+          description="Control how leads are allocated to this account"
+          options={[
+            {
+              id: 'yes',
+              label: 'Yes, Use Orders',
+              description: 'Must create orders for client to receive leads'
+            },
+            {
+              id: 'no',
+              label: 'No, Automatic',
+              description: 'Automatically allocate leads without orders'
+            }
+          ]}
+          mode="single"
+          layout="card"
+          onChange={(value) => handleOrderSystemChoiceDraft(value as string)}
+          disabled={completedSteps.has('order-system-question') && currentStep !== 'order-system-question'}
+          locked={completedSteps.has('order-system-question') && currentStep !== 'order-system-question'}
+        />,
+        undefined,
+        undefined,
+        'order-system-question'
+      );
+    }, 500);
+  }, [addSimpleMessage, markStepCompleted, addAgentResponse, completedSteps, currentStep, schedule]);
+
+  const handleOrderSystemChoiceDraft = useCallback((choice: string) => {
+    addSimpleMessage(choice === 'yes' ? 'Yes, Use Orders' : 'No, Automatic', 'user');
+    markStepCompleted('order-system-question');
+    setCurrentStep('revenue-requirements-question');
+    
+    schedule(() => {
+      if (choice === 'yes') {
+        addSimpleMessage('Great! Remember: You must create an order for this client to receive leads.', 'assistant');
+        
+        schedule(() => {
+          handleRevenueRequirementsQuestionDraft();
+        }, 800);
+      } else {
+        handleRevenueRequirementsQuestionDraft();
+      }
+    }, 500);
+  }, [addSimpleMessage, markStepCompleted, addAgentResponse, schedule]);
+
+  const handleRevenueRequirementsQuestionDraft = useCallback(() => {
+    schedule(() => {
+      addAgentResponse(
+        'Are there any revenue requirements?',
+        <ChoiceList
+          kind="choices"
+          title="Revenue Requirements"
+          description="Set minimum revenue and profit thresholds"
+          options={[
+            {
+              id: 'yes',
+              label: 'Yes, Set Requirements',
+              description: 'Configure minimum revenue and profit requirements'
+            },
+            {
+              id: 'no',
+              label: 'No Requirements',
+              description: 'Accept leads regardless of revenue potential'
+            }
+          ]}
+          mode="single"
+          layout="card"
+          onChange={(value) => handleRevenueRequirementsChoiceDraft(value as string)}
+          disabled={completedSteps.has('revenue-requirements-question') && currentStep !== 'revenue-requirements-question'}
+          locked={completedSteps.has('revenue-requirements-question') && currentStep !== 'revenue-requirements-question'}
+        />,
+        undefined,
+        undefined,
+        'revenue-requirements-question'
+      );
+    }, 500);
+  }, [addAgentResponse, completedSteps, currentStep, schedule]);
+
+  const handleRevenueRequirementsChoiceDraft = useCallback((choice: string) => {
+    addSimpleMessage(choice === 'yes' ? 'Yes, Set Requirements' : 'No Requirements', 'user');
+    markStepCompleted('revenue-requirements-question');
+    setCurrentStep(choice === 'yes' ? 'revenue-requirements-details' : 'criteria-question');
+    
+    schedule(() => {
+      if (choice === 'yes') {
+        addMessage(
+          'Configure revenue requirements for this account.',
+          'assistant',
+          {
+            component: (
+              <Form
+                kind="form"
+                title="Revenue Requirements"
+                description="Set minimum revenue and profit thresholds"
+                fields={[
+                  {
+                    id: 'minRevenue',
+                    label: 'Minimum Revenue ($)',
+                    type: 'number' as const,
+                    min: 0,
+                    placeholder: 'e.g., 25'
+                  },
+                  {
+                    id: 'minProfitAmount',
+                    label: 'Minimum Profit Amount ($)',
+                    type: 'number' as const,
+                    min: 0,
+                    placeholder: 'e.g., 10'
+                  },
+                  {
+                    id: 'minProfitPercent',
+                    label: 'Minimum Profit Percentage (%)',
+                    type: 'number' as const,
+                    min: 0,
+                    max: 100,
+                    placeholder: 'e.g., 40'
+                  }
+                ]}
+                submitLabel="Continue"
+                onSubmit={() => handleRevenueRequirementsSubmitDraft()}
+              />
+            ),
+            stepId: 'revenue-requirements-details'
+          }
+        );
+      } else {
+        handleCriteriaQuestionDraft();
+      }
+    }, 500);
+  }, [addSimpleMessage, markStepCompleted, addMessage, schedule]);
+
+  const handleRevenueRequirementsSubmitDraft = useCallback(() => {
+    addSimpleMessage('Revenue requirements saved', 'user');
+    markStepCompleted('revenue-requirements-details');
+    handleCriteriaQuestionDraft();
+  }, [addSimpleMessage, markStepCompleted]);
+
+  const handleCriteriaQuestionDraft = useCallback(() => {
+    schedule(() => {
+      addAgentResponse(
+        'Would you like to apply any criteria (e.g., state, zip, or lead field filters)?',
+        <ChoiceList
+          kind="choices"
+          title="Lead Criteria & Filtering"
+          description="Apply filters to control which leads this account receives"
+          options={[
+            {
+              id: 'yes',
+              label: 'Yes, Add Filters',
+              description: 'Configure geographic or field-based filtering'
+            },
+            {
+              id: 'no',
+              label: 'No Filters',
+              description: 'Accept all leads that meet other requirements'
+            }
+          ]}
+          mode="single"
+          layout="card"
+          onChange={(value) => handleCriteriaChoiceDraft(value as string)}
+          disabled={completedSteps.has('criteria-question') && currentStep !== 'criteria-question'}
+          locked={completedSteps.has('criteria-question') && currentStep !== 'criteria-question'}
+        />,
+        undefined,
+        undefined,
+        'criteria-question'
+      );
+    }, 500);
+  }, [addAgentResponse, completedSteps, currentStep, schedule]);
+
+  const handleCriteriaChoiceDraft = useCallback((choice: string) => {
+    addSimpleMessage(choice === 'yes' ? 'Yes, Add Filters' : 'No Filters', 'user');
+    markStepCompleted('criteria-question');
+    setCurrentStep(choice === 'yes' ? 'criteria-details' : 'delivery-account-creation');
+    
+    schedule(() => {
+      if (choice === 'yes') {
+        addMessage(
+          'Configure lead criteria and filtering for this account.',
+          'assistant',
+          {
+            component: (
+              <Form
+                kind="form"
+                title="Lead Criteria & Filtering"
+                description="Set up geographic and field-based filters"
+                fields={[
+                  {
+                    id: 'stateFilter',
+                    label: 'State Filters (optional)',
+                    type: 'text' as const,
+                    placeholder: 'e.g., CA, NY, TX (comma-separated)'
+                  },
+                  {
+                    id: 'zipFilter',
+                    label: 'ZIP Code Filters (optional)',
+                    type: 'text' as const,
+                    placeholder: 'e.g., 90210, 10001, 78701'
+                  },
+                  {
+                    id: 'leadFieldFilters',
+                    label: 'Additional Field Filters (optional)',
+                    type: 'text' as const,
+                    placeholder: 'e.g., property_type=residential, age>=25'
+                  }
+                ]}
+                submitLabel="Create Delivery Account"
+                onSubmit={() => handleDeliveryAccountSubmitDraft()}
+              />
+            ),
+            stepId: 'criteria-details'
+          }
+        );
+      } else {
+        handleDeliveryAccountSubmitDraft();
+      }
+    }, 500);
+  }, [addSimpleMessage, markStepCompleted, addMessage, schedule]);
+
+  const handleDeliveryAccountSubmitDraft = useCallback((accountData?: Record<string, any>) => {
+    addSimpleMessage('Delivery account created', 'user');
+    // Mark criteria-details as completed if we're coming from that step
+    if (currentStep === 'criteria-details') {
+      markStepCompleted('criteria-details');
+    }
+    markStepCompleted('delivery-account');
+    setCurrentStep('creation');
+    
+    schedule(() => {
+      // Add processing message
+      addProcessingMessage(
+        'Creating client and delivery account...',
+        'Setting up complete lead delivery system...'
+      );
+      
+      schedule(() => {
+        addAgentResponse(
+          'Client and delivery account created successfully! Your complete lead delivery system is now active.',
+          <SummaryCard
+            kind="summary"
+            title="Client Created Successfully"
+            items={[
+              {
+                id: 'client-created',
+                title: 'TechCorp Solutions',
+                subtitle: 'CL-001',
+                status: 'success' as const,
+                link: {
+                  href: '/clients/CL-001',
+                  label: 'Open'
+                }
+              }
+            ]}
+          />,
+          [
+            {
+              id: 'create-another',
+              label: 'Create Another Client',
+              variant: 'outline' as const,
+              onClick: () => handleToolSelection('create-new-client-draft')
+            },
+            {
+              id: 'back-home',
+              label: 'Back to Tools',
+              variant: 'outline' as const,
+              onClick: () => {
+                if (onStartOver) {
+                  onStartOver();
+                } else {
+                  // Fallback: Reset flow state locally
+                  resetSession();
+                  setCompletedSteps(new Set());
+                  setCurrentStep(null);
+                  setCurrentFlow(null);
+                  setFlowActive(false);
+                  setShowWelcome(true);
+                  setSelectedActions(new Set());
+                  clearDerivedValues();
+                }
+              }
+            }
+          ]
+        );
+        
+        markStepCompleted('creation');
+        setFlowActive(false);
+      }, 2500);
+    }, 500);
+  }, [addSimpleMessage, markStepCompleted, addAgentResponse, addProcessingMessage, schedule, handleToolSelection, handleStartOver, currentStep]);
+
+  const handleSkipDeliveryAccountDraft = useCallback(() => {
+    addSimpleMessage('No, Skip for Now', 'user');
+    markStepCompleted('delivery-account-choice');
+    setCurrentStep('creation');
+    
+    schedule(() => {
+      addAgentResponse(
+        'No problem! The client has been created without a delivery account. You can set up delivery accounts later from the client management screen.',
+        <Alert
+          kind="alert"
+          type="info"
+          title="Client Created"
+          message="TechCorp Solutions has been added to your system. To receive leads, you'll need to create a delivery account later."
+        />,
+        [
+          {
+            id: 'create-another',
+            label: 'Create Another Client',
+            variant: 'outline' as const,
+            onClick: () => handleToolSelection('create-new-client-draft')
+          },
+          {
+            id: 'back-home',
+            label: 'Back to Tools',
+            variant: 'outline' as const,
+            onClick: () => handleStartOver()
+          }
+        ]
+      );
+      
+      setFlowActive(false);
+    }, 500);
+  }, [addSimpleMessage, addAgentResponse, schedule, handleToolSelection, handleStartOver]);
+
+  const handleClientCreationDraft = useCallback(() => {
+    addSimpleMessage('Create Client', 'user');
+    markStepCompleted('configuration');
+    setCurrentStep('creation');
+    
+    addProcessingMessage('Creating client in LeadExec...');
+    
+    schedule(() => {
+      markStepCompleted('creation');
+      setCurrentStep('review');
+      
+      schedule(() => {
+        addAgentResponse(
+          '✅ Client created successfully! Your client is now active in LeadExec.',
+          <SummaryCard
+            kind="summary"
+            title="Client Creation Summary"
+            status="success"
+            items={[
+              { label: 'Company', value: 'Acme Corp' },
+              { label: 'Status', value: 'Active' },
+              { label: 'Client ID', value: 'CL-2024-001' },
+              { label: 'Delivery Method', value: 'Email' },
+              { label: 'Portal Access', value: 'Enabled' }
+            ]}
+          />,
+          [
+            {
+              id: 'create-another',
+              label: 'Create Another Client',
+              variant: 'outline' as const,
+              onClick: () => handleToolSelection('create-new-client-draft')
+            },
+            {
+              id: 'back-home',
+              label: 'Back to Tools',
+              variant: 'ghost' as const,
+              onClick: () => handleStartOver()
+            }
+          ]
+        );
+        
+        markStepCompleted('review');
+        setFlowActive(false);
+      }, 300);
+    }, 1500);
+  }, [addSimpleMessage, markStepCompleted, addAgentResponse, addProcessingMessage, schedule, handleToolSelection, handleStartOver]);
 
   const handleBulkUpload = useCallback(() => {
 

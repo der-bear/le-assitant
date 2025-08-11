@@ -123,7 +123,7 @@ export function Form({
     return computed;
   }, [sections, fields]);
 
-  // Initialize values only once from field defaults
+  // Initialize values from field defaults and update when field values change
   useEffect(() => {
     const initialValues: Record<string, any> = {};
     effectiveSections.forEach(section => {
@@ -133,8 +133,8 @@ export function Form({
         }
       });
     });
-    setValues(initialValues);
-  }, []); // Only run once on mount
+    setValues(prev => ({ ...prev, ...initialValues }));
+  }, [effectiveSections]); // Update when sections/fields change
 
   // Build validation rules map - update ref when validations change
   useEffect(() => {

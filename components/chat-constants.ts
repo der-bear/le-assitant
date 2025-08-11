@@ -10,6 +10,12 @@ export const QUICK_TILES = [
     icon: Building
   },
   {
+    id: 'create-new-client-draft',
+    title: 'Create New Client Draft',
+    description: 'Draft version for experimenting with new client setup flow',
+    icon: Building
+  },
+  {
     id: 'bulk-client-upload',
     title: 'Bulk Client Upload',
     description: 'Upload multiple clients at once using an Excel file with automatic credential generation',
@@ -62,6 +68,12 @@ export const DELIVERY_OPTIONS = [
     label: 'FTP Delivery',
     description: 'File transfer protocol for batch delivery',
     icon: 'Database'
+  },
+  {
+    id: 'pingpost',
+    label: 'Ping Post',
+    description: 'Real-time lead validation and delivery',
+    icon: 'Zap'
   },
   {
     id: 'skip',
@@ -159,6 +171,7 @@ export const HELP_SOURCES_BY_CATEGORY: Record<string, Array<{
 // Tool name mappings
 export const TOOL_NAMES: Record<string, string> = {
   'create-new-client': 'Create New Client',
+  'create-new-client-draft': 'Create New Client Draft',
   'bulk-client-upload': 'Bulk Client Upload'
 };
 
@@ -166,6 +179,7 @@ export const TOOL_NAMES: Record<string, string> = {
 export const DELIVERY_METHOD_LABELS: Record<string, string> = {
   'email': 'Email Delivery',
   'webhook': 'HTTP Webhook',
-  'ftp': 'FTP Delivery', 
+  'ftp': 'FTP Delivery',
+  'pingpost': 'Ping Post', 
   'skip': 'Skip for Now'
 };
