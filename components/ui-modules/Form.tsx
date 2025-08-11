@@ -123,18 +123,24 @@ export function Form({
     return computed;
   }, [sections, fields]);
 
-  // Initialize values from field defaults and update when field values change
+  // Initialize values from field defaults on mount and when key changes
   useEffect(() => {
     const initialValues: Record<string, any> = {};
-    effectiveSections.forEach(section => {
+    const allSections = sections.length > 0 ? sections : [{ id: 'default', fields }];
+    
+    allSections.forEach(section => {
       section.fields.forEach(field => {
         if (field.value !== undefined) {
           initialValues[field.id] = field.value;
         }
       });
     });
-    setValues(prev => ({ ...prev, ...initialValues }));
-  }, [effectiveSections]); // Update when sections/fields change
+    
+    // Set initial values directly (no comparison needed since key changes force re-mount)
+    if (Object.keys(initialValues).length > 0) {
+      setValues(initialValues);
+    }
+  }, [id]); // Only depend on the form ID/key to avoid loops
 
   // Build validation rules map - update ref when validations change
   useEffect(() => {

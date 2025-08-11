@@ -2241,7 +2241,7 @@ export function ConversationalChat({
           {
             component: (
               <Form
-                key={`notification-form-${Date.now()}`}
+                key={`notification-form-${clientEmail || 'empty'}`}
                 kind="form"
                 title="Notification Recipient"
                 description="Email address for delivery failure alerts"
