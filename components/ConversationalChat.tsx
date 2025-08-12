@@ -16,10 +16,8 @@ import {
   User, 
   ArrowRight,
   Bot,
-  ExternalLink,
   Download,
-  Plus,
-  Home
+  Wrench
 } from 'lucide-react';
 
 // Import types, constants, and utilities
@@ -67,6 +65,38 @@ export function ConversationalChat({
   const [selectedActions, setSelectedActions] = useState<Set<string>>(new Set());
   const [clientEmail, setClientEmail] = useState<string>('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  
+  // Store simplified flow data at component level
+  const [simplifiedFlowData, setSimplifiedFlowData] = useState<{
+    companyName?: string;
+    email?: string;
+    username?: string;
+    password?: string;
+    deliveryMethod?: string;
+    currentQuestion?: string;
+    webhookUrl?: string;
+    webhookAuthType?: string;
+    webhookUsername?: string;
+    webhookPassword?: string;
+    webhookApiKey?: string;
+    ftpServer?: string;
+    ftpPort?: string;
+    ftpUsername?: string;
+    ftpPassword?: string;
+    ftpDirectory?: string;
+    emailFieldConfig?: string;
+    emailExclusions?: string[];
+    dailyLeadLimit?: number;
+    leadPrice?: number;
+    leadTypes?: string;
+    excludeWeekends?: boolean;
+  }>({});
+  
+  // Use a ref to access flow data without causing re-renders
+  const simplifiedFlowDataRef = useRef(simplifiedFlowData);
+  useEffect(() => {
+    simplifiedFlowDataRef.current = simplifiedFlowData;
+  }, [simplifiedFlowData]);
 
   // Session + timers guard to prevent late async inserts after reset or flow changes
   const sessionIdRef = useRef(0);
@@ -184,6 +214,7 @@ export function ConversationalChat({
     setCurrentStep(null);
     setSelectedActions(new Set());
     setClientEmail('');
+    setSimplifiedFlowData({});
     // Update messages to unlock all locked components
     setMessages(prev => prev.map(msg => ({
       ...msg,
@@ -215,7 +246,7 @@ export function ConversationalChat({
   const WelcomeCards = useCallback(() => (
     <div className="space-y-6">
       {/* Quick Tiles Grid - responsive grid layout */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
         {QUICK_TILES.map(tile => (
           <Card
             key={tile.id}
@@ -320,6 +351,8 @@ export function ConversationalChat({
   const startGuidedFlow = useCallback((flowId: string) => {
     if (flowId === 'create-new-client') {
       handleClientSetup();
+    } else if (flowId === 'create-client-simplified') {
+      handleSimplifiedClientSetup();
     } else if (flowId === 'bulk-client-upload') {
       handleBulkUpload();
     } else {
@@ -342,12 +375,11 @@ export function ConversationalChat({
     addSimpleMessage(`${toolName}`, 'user');
 
     setCurrentFlow(toolId);
-    // Don't reset all completed steps - only initialize current flow if needed
+    // Clear completed steps for this specific flow to start fresh
     setCompletedSteps(prev => {
       const newMap = new Map(prev);
-      if (!newMap.has(toolId)) {
-        newMap.set(toolId, new Set());
-      }
+      // Always reset the steps for this flow to start fresh
+      newMap.set(toolId, new Set());
       return newMap;
     });
     setCurrentStep(null);
@@ -365,7 +397,8 @@ export function ConversationalChat({
     const toolName = TOOL_NAMES[toolId] || toolId;
     addSimpleMessage(`${toolName}`, 'user');
     
-    // Start new flow but keep completed steps locked
+    // Clear completed steps for a fresh start
+    setCompletedSteps(new Map());
     setCurrentFlow(toolId);
     setCurrentStep(null);
     
@@ -438,7 +471,7 @@ export function ConversationalChat({
   }, [completedSteps, currentStep]);
 
   // Helper to handle suggested action clicks with locking and selection logic
-  const handleSuggestedActionClick = useCallback((actionId: string, originalOnClick: () => void) => {
+  const handleSuggestedActionClick = useCallback((actionId: string, originalOnClick?: () => void) => {
     // Mark this action as selected
     setSelectedActions(prev => new Set([...prev, actionId]));
     
@@ -450,8 +483,10 @@ export function ConversationalChat({
       )
     })));
     
-    // Execute the original click handler
-    originalOnClick();
+    // Execute the original click handler if it exists
+    if (originalOnClick && typeof originalOnClick === 'function') {
+      originalOnClick();
+    }
   }, [flowActive]);
 
 
@@ -1007,8 +1042,208 @@ export function ConversationalChat({
     addSimpleMessage('Schedule details saved', 'user');
     markStepCompleted('schedule-details');
     setCurrentStep('retry-question');
-    handleRetryQuestion();
-  }, [addSimpleMessage, markStepCompleted, setCurrentStep]);
+    
+    // Show retry question after schedule details
+    schedule(() => {
+      addAgentResponse(
+        'Should there be retry logic if delivery fails?',
+        <ChoiceList
+          kind="choices"
+          title="Retry Logic"
+          description="Handle delivery failures automatically"
+          options={[
+            {
+              id: 'yes',
+              label: 'Yes, Enable Retry',
+              description: 'Automatically retry failed deliveries'
+            },
+            {
+              id: 'no',
+              label: 'No, Single Attempt',
+              description: 'Only attempt delivery once'
+            }
+          ]}
+          mode="single"
+          layout="card"
+          onChange={(value) => {
+            // Handle retry choice inline
+            const choice = value as string;
+            addSimpleMessage(choice === 'yes' ? 'Yes, Enable Retry' : 'No, Single Attempt', 'user');
+            markStepCompleted('retry-question');
+            setCurrentStep(choice === 'yes' ? 'retry-details' : 'notification-question');
+            
+            schedule(() => {
+              if (choice === 'yes') {
+                // Ask for retry details
+                addMessage(
+                  'Configure retry settings for failed deliveries.',
+                  'assistant',
+                  {
+                    component: (
+                      <Form
+                        kind="form"
+                        title="Retry Configuration"
+                        description="How should failed deliveries be retried?"
+                        fields={[
+                          {
+                            id: 'maxRetries',
+                            label: 'Maximum Retries',
+                            type: 'number' as const,
+                            placeholder: 'e.g., 3',
+                            required: true
+                          },
+                          {
+                            id: 'retryInterval',
+                            label: 'Retry Interval (minutes)',
+                            type: 'number' as const,
+                            placeholder: 'e.g., 30',
+                            required: true
+                          }
+                        ]}
+                        submitLabel="Save Retry Settings"
+                        onSubmit={() => {
+                          addSimpleMessage('Retry settings saved', 'user');
+                          markStepCompleted('retry-details');
+                          setCurrentStep('notification-question');
+                          handleNotificationQuestion();
+                        }}
+                        disabled={shouldLockStep('retry-details')}
+                        locked={shouldLockStep('retry-details')}
+                      />
+                    ),
+                    stepId: 'retry-details'
+                  }
+                );
+              } else {
+                // Show notification question
+                schedule(() => {
+                  addAgentResponse(
+                    'Should we notify the account owner on delivery failures?',
+                    <ChoiceList
+                      kind="choices"
+                      title="Failure Notifications"
+                      description="Alert account owners when delivery fails"
+                      options={[
+                        {
+                          id: 'yes',
+                          label: 'Yes, Send Notifications',
+                          description: 'Email alerts on failures'
+                        },
+                        {
+                          id: 'no',
+                          label: 'No Notifications',
+                          description: 'No alerts needed'
+                        }
+                      ]}
+                      mode="single"
+                      layout="card"
+                      onChange={(value) => {
+                        const choice = value as string;
+                        addSimpleMessage(choice === 'yes' ? 'Yes, Send Notifications' : 'No Notifications', 'user');
+                        markStepCompleted('notification-question');
+                        
+                        if (choice === 'yes') {
+                          setCurrentStep('notification-details');
+                          // Ask for notification details
+                          schedule(() => {
+                            addMessage(
+                              'Configure notification settings for delivery failures.',
+                              'assistant',
+                              {
+                                component: (
+                                  <Form
+                                    kind="form"
+                                    title="Notification Settings"
+                                    description="How should we notify about failures?"
+                                    fields={[
+                                      {
+                                        id: 'notificationEmail',
+                                        label: 'Notification Email',
+                                        type: 'email' as const,
+                                        placeholder: 'alerts@example.com',
+                                        required: true
+                                      },
+                                      {
+                                        id: 'notificationThreshold',
+                                        label: 'Failure Threshold',
+                                        type: 'number' as const,
+                                        placeholder: 'Number of failures before alert',
+                                        required: true
+                                      }
+                                    ]}
+                                    submitLabel="Save Notification Settings"
+                                    onSubmit={() => handleNotificationDetailsSubmit()}
+                                    disabled={shouldLockStep('notification-details')}
+                                    locked={shouldLockStep('notification-details')}
+                                  />
+                                ),
+                                stepId: 'notification-details'
+                              }
+                            );
+                          }, 500);
+                        } else {
+                          // Skip to delivery account question
+                          markStepCompleted('delivery-config');
+                          setCurrentStep('delivery-account-choice');
+                          
+                          schedule(() => {
+                            addAgentResponse(
+                              'Would you like to create a delivery account for this client?',
+                              <ChoiceList
+                                kind="choices"
+                                title="Delivery Account Setup"
+                                description="Choose whether to set up delivery account now or later"
+                                options={[
+                                  {
+                                    id: 'yes',
+                                    label: 'Yes, Create Delivery Account',
+                                    description: 'Set up account limits, revenue requirements, and filtering'
+                                  },
+                                  {
+                                    id: 'no',
+                                    label: 'No, Skip for Now',
+                                    description: 'You can create delivery accounts later'
+                                  }
+                                ]}
+                                mode="single"
+                                layout="card"
+                                onChange={(value) => {
+                                  if (value === 'yes') {
+                                    handleDeliveryAccountSetup();
+                                  } else {
+                                    handleSkipDeliveryAccount();
+                                  }
+                                }}
+                                disabled={shouldLockStep('delivery-account-choice')}
+                                locked={shouldLockStep('delivery-account-choice')}
+                              />,
+                              undefined,
+                              undefined,
+                              'delivery-account-choice'
+                            );
+                          }, 500);
+                        }
+                      }}
+                      disabled={shouldLockStep('notification-question')}
+                      locked={shouldLockStep('notification-question')}
+                    />,
+                    undefined,
+                    undefined,
+                    'notification-question'
+                  );
+                }, 500);
+              }
+            }, 500);
+          }}
+          disabled={shouldLockStep('retry-question')}
+          locked={shouldLockStep('retry-question')}
+        />,
+        undefined,
+        undefined,
+        'retry-question'
+      );
+    }, 500);
+  }, [addSimpleMessage, markStepCompleted, setCurrentStep, addAgentResponse, schedule, shouldLockStep, addMessage]);
 
   const handleRetryQuestion = useCallback(() => {
     schedule(() => {
@@ -1859,8 +2094,8 @@ export function ConversationalChat({
                 ]}
                 submitLabel="Create Delivery Account"
                 onSubmit={() => handleDeliveryAccountSubmit()}
-                disabled={false}
-                locked={false}
+                disabled={shouldLockStep('criteria-details')}
+                locked={shouldLockStep('criteria-details')}
               />
             ),
             stepId: 'criteria-details'
@@ -1912,7 +2147,7 @@ export function ConversationalChat({
               id: 'create-another',
               label: 'Create Another Client',
               variant: 'outline' as const,
-              onClick: () => startNewFlow('create-new-client-draft')
+              onClick: () => startNewFlow('create-new-client')
             },
             {
               id: 'back-home',
@@ -1964,7 +2199,7 @@ export function ConversationalChat({
             id: 'create-another',
             label: 'Create Another Client',
             variant: 'outline' as const,
-            onClick: () => handleToolSelection('create-new-client-draft')
+            onClick: () => handleToolSelection('create-new-client')
           },
           {
             id: 'back-home',
@@ -1984,7 +2219,7 @@ export function ConversationalChat({
     markStepCompleted('configuration');
     setCurrentStep('creation');
     
-    addProcessingMessage('Creating client in LeadExec...');
+    addProcessingMessage('Creating client in LeadExec...', 'Setting up client configuration and generating credentials...');
     
     schedule(() => {
       markStepCompleted('creation');
@@ -1996,13 +2231,37 @@ export function ConversationalChat({
           <SummaryCard
             kind="summary"
             title="Client Creation Summary"
-            status="success"
             items={[
-              { label: 'Company', value: 'Acme Corp' },
-              { label: 'Status', value: 'Active' },
-              { label: 'Client ID', value: 'CL-2024-001' },
-              { label: 'Delivery Method', value: 'Email' },
-              { label: 'Portal Access', value: 'Enabled' }
+              { 
+                id: 'company',
+                title: 'Company',
+                subtitle: 'Acme Corp',
+                status: 'success' as const
+              },
+              { 
+                id: 'status',
+                title: 'Status',
+                subtitle: 'Active',
+                status: 'success' as const
+              },
+              { 
+                id: 'client-id',
+                title: 'Client ID',
+                subtitle: 'CL-2024-001',
+                status: 'info' as const
+              },
+              { 
+                id: 'delivery',
+                title: 'Delivery Method',
+                subtitle: 'Email',
+                status: 'info' as const
+              },
+              { 
+                id: 'portal',
+                title: 'Portal Access',
+                subtitle: 'Enabled',
+                status: 'success' as const
+              }
             ]}
           />,
           [
@@ -2010,7 +2269,7 @@ export function ConversationalChat({
               id: 'create-another',
               label: 'Create Another Client',
               variant: 'outline' as const,
-              onClick: () => startNewFlow('create-new-client-draft')
+              onClick: () => startNewFlow('create-new-client')
             },
             {
               id: 'back-home',
@@ -2320,9 +2579,942 @@ export function ConversationalChat({
     }, 500);
   }, [markStepCompleted, addAgentResponse, addSimpleMessage, handleToolSelection, schedule]);
 
+  // Handle responses in simplified flow - defined before handleUserInput to avoid circular dependency
+  const handleSimplifiedResponse = useCallback((response: string, skipUserMessage: boolean = false) => {
+    const currentData = simplifiedFlowDataRef.current;
+    console.log('handleSimplifiedResponse called:', { response, currentQuestion: currentData.currentQuestion });
+    
+    // Guard against processing if no current question
+    if (!currentData.currentQuestion) return;
+    
+    if (currentData.currentQuestion === 'companyName') {
+      // Store company name and ask for email
+      setSimplifiedFlowData(prev => ({ ...prev, companyName: response, currentQuestion: 'email' }));
+      if (!skipUserMessage) addSimpleMessage(response, 'user');
+      
+      schedule(() => {
+        addMessage(
+          `Great!`,
+          'assistant'
+        );
+        
+        schedule(() => {
+          addMessage(
+            `Now I need an email address for ${response}. This will be used for login and lead delivery.\n\nPlease type the email address:`,
+            'assistant'
+          );
+        }, 500);
+      }, 300);
+      
+    } else if (currentData.currentQuestion === 'email') {
+      // Check if user is trying to skip ahead to delivery method
+      const deliveryKeywords = ['email delivery', 'http webhook', 'webhook', 'ftp transfer', 'ftp', 'skip'];
+      const normalizedResponse = response.toLowerCase().trim();
+      
+      if (deliveryKeywords.includes(normalizedResponse)) {
+        // User is jumping ahead - generate default credentials and move to delivery
+        const defaultEmail = `${currentData.companyName?.toLowerCase().replace(/\s+/g, '')}@example.com`;
+        const username = defaultEmail.split('@')[0];
+        const password = `${username.charAt(0).toUpperCase()}${username.slice(1)}#${Math.floor(Math.random() * 10000)}!`;
+        
+        setSimplifiedFlowData(prev => ({ 
+          ...prev, 
+          email: defaultEmail,
+          username,
+          password,
+          currentQuestion: 'delivery-choice'
+        }));
+        
+        // Process the delivery choice
+        const deliveryMap: Record<string, string> = {
+          'email': 'email',
+          'email delivery': 'email',
+          'webhook': 'webhook',
+          'http webhook': 'webhook',
+          'ftp': 'ftp',
+          'ftp transfer': 'ftp',
+          'skip': 'skip'
+        };
+        
+        const mappedDelivery = deliveryMap[normalizedResponse] || normalizedResponse;
+        handleSimplifiedResponse(mappedDelivery, false);
+        return;
+      }
+      
+      // Validate email and generate credentials
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(response)) {
+        if (!skipUserMessage) addSimpleMessage(response, 'user');
+        addMessage(
+          "That doesn't look like a valid email address. Please provide a valid email address:",
+          'assistant'
+        );
+        return;
+      }
+      
+      if (!skipUserMessage) addSimpleMessage(response, 'user');
+      
+      // Generate credentials and store everything at once
+      const username = response.split('@')[0];
+      const password = `${username.charAt(0).toUpperCase()}${username.slice(1)}#${Math.floor(Math.random() * 10000)}!`;
+      
+      // Store email and generated credentials in flow data
+      setSimplifiedFlowData(prev => ({ 
+        ...prev, 
+        email: response,
+        username, 
+        password,
+        currentQuestion: 'credentials'
+      }));
+      
+      schedule(() => {
+        addMessage(
+          `Perfect!`,
+          'assistant'
+        );
+        
+        schedule(() => {
+          // Define credential action handler
+          const handleCredentialAction = (actionId: string) => {
+              if (actionId === 'use-generated') {
+                // Show user message first
+                addSimpleMessage('Use these credentials', 'user');
+                
+                // Move to delivery method question IMMEDIATELY
+                setSimplifiedFlowData(prev => ({ 
+                  ...prev, 
+                  currentQuestion: 'delivery'
+                }));
+                
+                // Ask about delivery method
+                schedule(() => {
+                  // Clear selected actions for new question
+                  setSelectedActions(new Set());
+                  
+                  addMessage(
+                    "How would you like leads delivered to this client?",
+                    'assistant',
+                    {
+                      suggestedActions: [
+                        { 
+                          id: 'email', 
+                          label: 'Email delivery',
+                          onClick: () => handleSimplifiedResponse('email', false)
+                        },
+                        { 
+                          id: 'webhook', 
+                          label: 'HTTP webhook',
+                          onClick: () => handleSimplifiedResponse('webhook', false)
+                        },
+                        { 
+                          id: 'ftp', 
+                          label: 'FTP transfer',
+                          onClick: () => handleSimplifiedResponse('ftp', false)
+                        },
+                        { 
+                          id: 'skip', 
+                          label: 'Skip for now',
+                          onClick: () => handleSimplifiedResponse('skip', false)
+                        }
+                      ]
+                    }
+                  );
+                }, 300);
+              } else if (actionId === 'custom-username') {
+                // Handle custom username only
+                addSimpleMessage("I'll provide custom username", 'user');
+                addMessage(
+                  "Please type the custom username:",
+                  'assistant'
+                );
+                setSimplifiedFlowData(prev => ({ 
+                  ...prev, 
+                  currentQuestion: 'custom-username-only'
+                }));
+              } else if (actionId === 'custom-both') {
+                // Handle custom credentials
+                addSimpleMessage("I'll provide both", 'user');
+                addMessage(
+                  "Please type the custom username and password separated by a space:",
+                  'assistant'
+                );
+                setSimplifiedFlowData(prev => ({ 
+                  ...prev, 
+                  currentQuestion: 'custom-credentials'
+                }));
+              }
+          };
+          
+          addMessage(
+            `I've generated secure credentials for ${currentData.companyName}:\n\n**Username:** ${username}\n**Password:** ${password}\n\nWould you like to use these or provide your own?`,
+            'assistant',
+            {
+              suggestedActions: [
+                { 
+                  id: 'use-generated', 
+                  label: 'Use these credentials',
+                  onClick: () => handleCredentialAction('use-generated')
+                },
+                { 
+                  id: 'custom-username', 
+                  label: "I'll provide custom username",
+                  onClick: () => handleCredentialAction('custom-username')
+                },
+                { 
+                  id: 'custom-both', 
+                  label: "I'll provide both",
+                  onClick: () => handleCredentialAction('custom-both')
+                }
+              ]
+            }
+          );
+        }, 500);
+      }, 300);
+      
+    } else if (currentData.currentQuestion === 'custom-username-only') {
+      // Handle custom username only
+      const customUsername = response.trim();
+      const customPassword = `${customUsername}#${Math.floor(Math.random() * 10000)}!`;
+      
+      setSimplifiedFlowData(prev => ({ 
+        ...prev,
+        username: customUsername,
+        password: customPassword,
+        currentQuestion: 'delivery'
+      }));
+      
+      if (!skipUserMessage) addSimpleMessage(response, 'user');
+      
+      schedule(() => {
+        addMessage(
+          `Perfect! I've set up the credentials:\n\n**Username:** ${customUsername}\n**Password:** ${customPassword}`,
+          'assistant'
+        );
+        
+        schedule(() => {
+          setSelectedActions(new Set());
+          addMessage(
+            "How would you like leads delivered to this client?",
+            'assistant',
+            {
+              suggestedActions: [
+                { 
+                  id: 'email', 
+                  label: 'Email delivery',
+                  onClick: () => handleSimplifiedResponse('email', false)
+                },
+                { 
+                  id: 'webhook', 
+                  label: 'HTTP webhook',
+                  onClick: () => handleSimplifiedResponse('webhook', false)
+                },
+                { 
+                  id: 'ftp', 
+                  label: 'FTP transfer',
+                  onClick: () => handleSimplifiedResponse('ftp', false)
+                },
+                { 
+                  id: 'skip', 
+                  label: 'Skip for now',
+                  onClick: () => handleSimplifiedResponse('skip', false)
+                }
+              ]
+            }
+          );
+        }, 500);
+      }, 300);
+      
+    } else if (currentData.currentQuestion === 'delivery' || currentData.currentQuestion === 'delivery-choice') {
+      const deliveryLabels: Record<string, string> = {
+        'email': 'Email delivery',
+        'webhook': 'HTTP webhook',
+        'ftp': 'FTP transfer',
+        'skip': 'Skip for now'
+      };
+      
+      setSimplifiedFlowData(prev => ({ ...prev, deliveryMethod: response, currentQuestion: 'delivery-config' }));
+      if (!skipUserMessage) addSimpleMessage(deliveryLabels[response] || response, 'user');
+      
+      // Handle delivery method configuration
+      schedule(() => {
+        if (response === 'webhook') {
+          addMessage(
+            `Good choice! Now I need the webhook endpoint URL.\n\nPlease provide the webhook URL where leads should be sent:`,
+            'assistant'
+          );
+          setSimplifiedFlowData(prev => ({ ...prev, currentQuestion: 'webhook-url' }));
+        } else if (response === 'email') {
+          // Clear selected actions for new question to prevent locking
+          setSelectedActions(new Set());
+          
+          addMessage(
+            `Perfect! I'll use ${currentData.email} for delivery.\n\nShould I include all lead fields in the email, or would you like to exclude some?`,
+            'assistant',
+            {
+              suggestedActions: [
+                {
+                  id: 'all-fields',
+                  label: 'Include all fields',
+                  onClick: () => handleSimplifiedResponse('all-fields', false)
+                },
+                {
+                  id: 'exclude-some',
+                  label: 'Let me specify exclusions',
+                  onClick: () => handleSimplifiedResponse('exclude-some', false)
+                }
+              ]
+            }
+          );
+          setSimplifiedFlowData(prev => ({ ...prev, currentQuestion: 'email-fields' }));
+        } else if (response === 'ftp') {
+          addMessage(
+            `I'll help you set up FTP delivery. What's the FTP server address?\n\nPlease provide the FTP server hostname or IP:`,
+            'assistant'
+          );
+          setSimplifiedFlowData(prev => ({ ...prev, currentQuestion: 'ftp-server' }));
+        } else {
+          // Skip delivery config, move to lead configuration
+          setSimplifiedFlowData(prev => ({ ...prev, currentQuestion: 'lead-limit' }));
+          schedule(() => {
+            addMessage(
+              `Now let's configure lead limits. How many leads per day should this client receive? (Type a number, e.g., 50)`,
+              'assistant'
+            );
+          }, 300);
+        }
+      }, 300);
+      
+    } else if (currentData.currentQuestion === 'custom-credentials') {
+      // Handle custom credential input
+      const parts = response.split(' ');
+      const customUsername = parts[0] || 'user';
+      const customPassword = parts[1] || `${customUsername}#${Math.floor(Math.random() * 10000)}!`;
+      
+      // Update state to delivery question
+      setSimplifiedFlowData(prev => ({ 
+        ...prev,
+        username: customUsername,
+        password: customPassword,
+        currentQuestion: 'delivery' // Use consistent 'delivery' state
+      }));
+      
+      if (!skipUserMessage) addSimpleMessage(response, 'user');
+      
+      // Show confirmation and ask about delivery method
+      schedule(() => {
+        addMessage(
+          `Perfect! I've set up the credentials:\n\n**Username:** ${customUsername}\n**Password:** ${customPassword}`,
+          'assistant'
+        );
+        
+        schedule(() => {
+          // Clear selected actions for new question
+          setSelectedActions(new Set());
+          
+          addMessage(
+            "How would you like leads delivered to this client?",
+            'assistant',
+            {
+              suggestedActions: [
+                { 
+                  id: 'email', 
+                  label: 'Email delivery',
+                  onClick: () => handleSimplifiedResponse('email', false)
+                },
+                { 
+                  id: 'webhook', 
+                  label: 'HTTP webhook',
+                  onClick: () => handleSimplifiedResponse('webhook', false)
+                },
+                { 
+                  id: 'ftp', 
+                  label: 'FTP transfer',
+                  onClick: () => handleSimplifiedResponse('ftp', false)
+                },
+                { 
+                  id: 'skip', 
+                  label: 'Skip for now',
+                  onClick: () => handleSimplifiedResponse('skip', false)
+                }
+              ]
+            }
+          );
+        }, 500);
+      }, 300);
+    } else if (currentData.currentQuestion === 'webhook-url') {
+      // Store webhook URL and ask for authentication method
+      setSimplifiedFlowData(prev => ({ ...prev, webhookUrl: response, currentQuestion: 'webhook-auth-type' }));
+      if (!skipUserMessage) addSimpleMessage(response, 'user');
+      
+      schedule(() => {
+        // Clear selected actions for new question to prevent locking
+        setSelectedActions(new Set());
+        
+        // Ensure the ref is updated before creating the buttons
+        simplifiedFlowDataRef.current = { ...simplifiedFlowDataRef.current, webhookUrl: response, currentQuestion: 'webhook-auth-type' };
+        
+        addMessage(
+          `Got it! Does this webhook require authentication?`,
+          'assistant',
+          {
+            suggestedActions: [
+              {
+                id: 'no-auth',
+                label: 'No authentication',
+                onClick: () => handleSimplifiedResponse('no-auth', false)
+              },
+              {
+                id: 'basic-auth',
+                label: 'Basic authentication',
+                onClick: () => handleSimplifiedResponse('basic-auth', false)
+              },
+              {
+                id: 'api-key',
+                label: 'API key',
+                onClick: () => handleSimplifiedResponse('api-key', false)
+              }
+            ]
+          }
+        );
+      }, 300);
+      
+    } else if (currentData.currentQuestion === 'webhook-auth-type') {
+      const authLabels: Record<string, string> = {
+        'no-auth': 'No authentication',
+        'basic-auth': 'Basic authentication',
+        'api-key': 'API key'
+      };
+      
+      setSimplifiedFlowData(prev => ({ ...prev, webhookAuthType: response }));
+      if (!skipUserMessage) addSimpleMessage(authLabels[response] || response, 'user');
+      
+      schedule(() => {
+        if (response === 'basic-auth') {
+          addMessage(
+            `Please provide the username and password for basic authentication (separated by a space):\n\nFormat: username password`,
+            'assistant'
+          );
+          setSimplifiedFlowData(prev => ({ ...prev, currentQuestion: 'webhook-basic-auth' }));
+        } else if (response === 'api-key') {
+          addMessage(
+            `Please provide the API key for authentication:`,
+            'assistant'
+          );
+          setSimplifiedFlowData(prev => ({ ...prev, currentQuestion: 'webhook-api-key' }));
+        } else {
+          // No auth needed, move to configuration
+          setSimplifiedFlowData(prev => ({ ...prev, webhookAuthType: 'none', currentQuestion: 'lead-limit' }));
+          schedule(() => {
+            addMessage(
+              `Now let's configure lead limits. How many leads per day should this client receive? (Type a number, e.g., 50)`,
+              'assistant'
+            );
+          }, 300);
+        }
+      }, 300);
+      
+    } else if (currentData.currentQuestion === 'webhook-basic-auth') {
+      // Parse basic auth credentials
+      const parts = response.split(' ');
+      const webhookUsername = parts[0] || 'webhook';
+      const webhookPassword = parts[1] || `webhook#${Math.floor(Math.random() * 10000)}!`;
+      
+      setSimplifiedFlowData(prev => ({ 
+        ...prev, 
+        webhookUsername,
+        webhookPassword,
+        currentQuestion: 'lead-limit'
+      }));
+      
+      if (!skipUserMessage) addSimpleMessage(response, 'user');
+      
+      schedule(() => {
+        addMessage(
+          `Perfect! I've set up the credentials:\n\n**Username:** ${webhookUsername}\n**Password:** ${webhookPassword}\n\nNow let's configure lead limits. How many leads per day should this client receive? (Type a number, e.g., 50)`,
+          'assistant'
+        );
+      }, 300);
+      
+    } else if (currentData.currentQuestion === 'webhook-api-key') {
+      setSimplifiedFlowData(prev => ({ 
+        ...prev, 
+        webhookApiKey: response,
+        currentQuestion: 'lead-limit'
+      }));
+      
+      if (!skipUserMessage) addSimpleMessage(response, 'user');
+      
+      schedule(() => {
+        addMessage(
+          `Now let's configure lead limits. How many leads per day should this client receive? (Type a number, e.g., 50)`,
+          'assistant'
+        );
+      }, 300);
+      
+    } else if (currentData.currentQuestion === 'ftp-server') {
+      // Store FTP server and ask for port
+      setSimplifiedFlowData(prev => ({ ...prev, ftpServer: response, currentQuestion: 'ftp-port' }));
+      if (!skipUserMessage) addSimpleMessage(response, 'user');
+      
+      schedule(() => {
+        addMessage(
+          `What port should I use for FTP? (Default is 21)`,
+          'assistant',
+          {
+            suggestedActions: [
+              {
+                id: 'default-port',
+                label: 'Use default (21)',
+                onClick: () => handleSimplifiedResponse('21', false)
+              },
+              {
+                id: 'port-22',
+                label: 'SFTP (22)',
+                onClick: () => handleSimplifiedResponse('22', false)
+              }
+            ]
+          }
+        );
+      }, 300);
+      
+    } else if (currentData.currentQuestion === 'ftp-port') {
+      setSimplifiedFlowData(prev => ({ ...prev, ftpPort: response, currentQuestion: 'ftp-username' }));
+      if (!skipUserMessage) addSimpleMessage(response === '21' ? 'Use default (21)' : response === '22' ? 'SFTP (22)' : response, 'user');
+      
+      schedule(() => {
+        addMessage(
+          `Now I need the FTP username:`,
+          'assistant'
+        );
+      }, 300);
+      
+    } else if (currentData.currentQuestion === 'ftp-username') {
+      setSimplifiedFlowData(prev => ({ ...prev, ftpUsername: response, currentQuestion: 'ftp-password' }));
+      if (!skipUserMessage) addSimpleMessage(response, 'user');
+      
+      schedule(() => {
+        addMessage(
+          `And the FTP password:`,
+          'assistant'
+        );
+      }, 300);
+      
+    } else if (currentData.currentQuestion === 'ftp-password') {
+      setSimplifiedFlowData(prev => ({ ...prev, ftpPassword: response, currentQuestion: 'ftp-directory' }));
+      if (!skipUserMessage) addSimpleMessage('•'.repeat(response.length), 'user'); // Mask password
+      
+      schedule(() => {
+        // Clear selected actions for new question to prevent locking
+        setSelectedActions(new Set());
+        
+        addMessage(
+          `What directory should I upload files to? (Leave empty for root directory)`,
+          'assistant',
+          {
+            suggestedActions: [
+              {
+                id: 'root-dir',
+                label: 'Root directory',
+                onClick: () => handleSimplifiedResponse('/', false)
+              },
+              {
+                id: 'leads-dir',
+                label: '/leads',
+                onClick: () => handleSimplifiedResponse('/leads', false)
+              }
+            ]
+          }
+        );
+      }, 300);
+      
+    } else if (currentData.currentQuestion === 'ftp-directory') {
+      const directory = response || '/';
+      setSimplifiedFlowData(prev => ({ 
+        ...prev, 
+        ftpDirectory: directory,
+        currentQuestion: 'lead-limit'
+      }));
+      
+      if (!skipUserMessage) addSimpleMessage(directory === '/' ? 'Root directory' : directory, 'user');
+      
+      schedule(() => {
+        addMessage(
+          `Now let's configure lead limits. How many leads per day should this client receive? (Type a number, e.g., 50)`,
+          'assistant'
+        );
+      }, 300);
+      
+    } else if (currentData.currentQuestion === 'email-fields') {
+      // Handle email field configuration
+      setSimplifiedFlowData(prev => ({ ...prev, emailFieldConfig: response, currentQuestion: 'complete' }));
+      if (!skipUserMessage) addSimpleMessage(response === 'all-fields' ? 'Include all fields' : 'Let me specify exclusions', 'user');
+      
+      if (response === 'exclude-some') {
+        schedule(() => {
+          addMessage(
+            `Which fields would you like to exclude from emails? (Type field names separated by commas, or type 'none' to include all)`,
+            'assistant'
+          );
+          setSimplifiedFlowData(prev => ({ ...prev, currentQuestion: 'email-exclusions' }));
+        }, 300);
+      } else {
+        setSimplifiedFlowData(prev => ({ ...prev, currentQuestion: 'lead-limit' }));
+        schedule(() => {
+          // Clear selected actions for new question to prevent locking
+          setSelectedActions(new Set());
+          
+          addMessage(
+          `Now let's configure lead limits. How many leads per day should this client receive? (Default is 50)`,
+          'assistant',
+          {
+            suggestedActions: [
+              {
+                id: 'default-limit',
+                label: 'Use default (50)',
+                onClick: () => handleSimplifiedResponse('50', false)
+              },
+              {
+                id: 'limit-25',
+                label: '25 leads/day',
+                onClick: () => handleSimplifiedResponse('25', false)
+              },
+              {
+                id: 'limit-100',
+                label: '100 leads/day',
+                onClick: () => handleSimplifiedResponse('100', false)
+              }
+            ]
+          }
+        );
+        }, 300);
+      }
+      
+    } else if (currentData.currentQuestion === 'email-exclusions') {
+      const exclusions = response.toLowerCase() === 'none' ? [] : response.split(',').map(f => f.trim());
+      setSimplifiedFlowData(prev => ({ 
+        ...prev, 
+        emailExclusions: exclusions,
+        currentQuestion: 'lead-limit'
+      }));
+      
+      if (!skipUserMessage) addSimpleMessage(response, 'user');
+      
+      // Move to lead configuration questions
+      schedule(() => {
+        addMessage(
+          `Now let's configure lead limits. How many leads per day should this client receive? (Type a number, e.g., 50)`,
+          'assistant'
+        );
+      }, 300);
+    } else if (currentData.currentQuestion === 'lead-limit') {
+      // Handle daily lead limit
+      const limit = parseInt(response) || 50;
+      setSimplifiedFlowData(prev => ({ 
+        ...prev, 
+        dailyLeadLimit: limit,
+        currentQuestion: 'lead-price'
+      }));
+      
+      if (!skipUserMessage) addSimpleMessage(response, 'user');
+      
+      schedule(() => {
+        addMessage(
+          `Got it, ${limit} leads per day. What's the price per lead in dollars? (e.g., 25 for $25)`,
+          'assistant'
+        );
+      }, 300);
+      
+    } else if (currentData.currentQuestion === 'lead-price') {
+      // Handle price per lead
+      const price = parseFloat(response) || 25;
+      setSimplifiedFlowData(prev => ({ 
+        ...prev, 
+        leadPrice: price,
+        currentQuestion: 'lead-types'
+      }));
+      
+      if (!skipUserMessage) addSimpleMessage(`$${price}`, 'user');
+      
+      schedule(() => {
+        // Clear selected actions for new question to prevent locking
+        setSelectedActions(new Set());
+        
+        addMessage(
+          `Perfect! $${price} per lead. What types of leads should this client receive?`,
+          'assistant',
+          {
+            suggestedActions: [
+              {
+                id: 'all-types',
+                label: 'All lead types',
+                onClick: () => handleSimplifiedResponse('all', false)
+              },
+              {
+                id: 'residential',
+                label: 'Residential only',
+                onClick: () => handleSimplifiedResponse('residential', false)
+              },
+              {
+                id: 'commercial',
+                label: 'Commercial only',
+                onClick: () => handleSimplifiedResponse('commercial', false)
+              }
+            ]
+          }
+        );
+      }, 300);
+      
+    } else if (currentData.currentQuestion === 'lead-types') {
+      // Handle lead types selection
+      const typeLabels: Record<string, string> = {
+        'all': 'All lead types',
+        'residential': 'Residential only',
+        'commercial': 'Commercial only'
+      };
+      
+      setSimplifiedFlowData(prev => ({ 
+        ...prev, 
+        leadTypes: response,
+        currentQuestion: 'weekend-delivery'
+      }));
+      
+      if (!skipUserMessage) addSimpleMessage(typeLabels[response] || response, 'user');
+      
+      schedule(() => {
+        // Clear selected actions for new question to prevent locking
+        setSelectedActions(new Set());
+        
+        addMessage(
+          `Should I deliver leads on weekends?`,
+          'assistant',
+          {
+            suggestedActions: [
+              {
+                id: 'yes-weekends',
+                label: 'Yes, include weekends',
+                onClick: () => handleSimplifiedResponse('yes', false)
+              },
+              {
+                id: 'no-weekends',
+                label: 'No, weekdays only',
+                onClick: () => handleSimplifiedResponse('no', false)
+              }
+            ]
+          }
+        );
+      }, 300);
+      
+    } else if (currentData.currentQuestion === 'weekend-delivery') {
+      // Handle weekend delivery preference
+      const excludeWeekends = response.toLowerCase() === 'no';
+      setSimplifiedFlowData(prev => ({ 
+        ...prev, 
+        excludeWeekends,
+        currentQuestion: 'complete'
+      }));
+      
+      if (!skipUserMessage) addSimpleMessage(excludeWeekends ? 'No, weekdays only' : 'Yes, include weekends', 'user');
+      
+      schedule(() => {
+        completeClientSetup({ 
+          ...currentData, 
+          excludeWeekends
+        });
+      }, 300);
+    }
+    
+    // Helper function to complete client setup
+    function completeClientSetup(finalData: any) {
+      const deliveryLabels: Record<string, string> = {
+        'email': 'Email delivery',
+        'webhook': 'HTTP webhook',
+        'ftp': 'FTP transfer',
+        'skip': 'Not configured'
+      };
+      
+      // Build delivery config summary
+      let deliveryConfig = deliveryLabels[finalData.deliveryMethod] || 'Not configured';
+      
+      if (finalData.deliveryMethod === 'webhook') {
+        deliveryConfig += `\n  • URL: ${finalData.webhookUrl}`;
+        if (finalData.webhookAuthType === 'basic') {
+          deliveryConfig += `\n  • Auth: Basic (${finalData.webhookUsername})`;
+        } else if (finalData.webhookAuthType === 'api-key') {
+          deliveryConfig += `\n  • Auth: API Key`;
+        }
+      } else if (finalData.deliveryMethod === 'ftp') {
+        deliveryConfig += `\n  • Server: ${finalData.ftpServer}:${finalData.ftpPort}`;
+        deliveryConfig += `\n  • User: ${finalData.ftpUsername}`;
+        deliveryConfig += `\n  • Directory: ${finalData.ftpDirectory}`;
+      } else if (finalData.deliveryMethod === 'email') {
+        deliveryConfig += ` to ${finalData.email}`;
+        if (finalData.emailExclusions && finalData.emailExclusions.length > 0) {
+          deliveryConfig += `\n  • Excluded fields: ${finalData.emailExclusions.join(', ')}`;
+        }
+      }
+      
+      // Build configuration summary
+      let configSummary = '';
+      if (finalData.dailyLeadLimit) {
+        configSummary += `\n**Lead Limits:** ${finalData.dailyLeadLimit} leads/day`;
+      }
+      if (finalData.leadPrice) {
+        configSummary += `\n**Price per Lead:** $${finalData.leadPrice}`;
+      }
+      if (finalData.leadTypes && finalData.leadTypes !== 'all') {
+        configSummary += `\n**Lead Types:** ${finalData.leadTypes}`;
+      }
+      if (finalData.excludeWeekends) {
+        configSummary += `\n**Weekend Delivery:** Excluded`;
+      }
+      
+      addMessage(
+        `Excellent! I'm creating the client now with these details:\n\n**Company:** ${finalData.companyName}\n**Email:** ${finalData.email}\n**Username:** ${finalData.username}\n**Delivery:** ${deliveryConfig}${configSummary}`,
+        'assistant'
+      );
+      
+      // Show processing that auto-removes
+      schedule(() => {
+        addProcessingMessage(
+          'Creating client in LeadExec...',
+          'Setting up client configuration and generating credentials...'
+        );
+      }, 500);
+      
+      // Show success with proper actions matching regular flow
+      schedule(() => {
+        // Clear selected actions to prevent blocking
+        setSelectedActions(new Set());
+        
+        addMessage(
+          `Client "${finalData.companyName}" has been successfully created!\n\nThe client can now log in using their credentials. You can configure additional settings anytime from the client management panel.`,
+          'assistant',
+          {
+            suggestedActions: [
+              { 
+                id: 'open-client', 
+                label: 'Open Client',
+                onClick: () => {
+                  addSimpleMessage('Open Client', 'user');
+                  schedule(() => {
+                    addMessage(
+                      `Opening client dashboard for ${finalData.companyName}...`,
+                      'assistant'
+                    );
+                  }, 300);
+                }
+              },
+              { 
+                id: 'create-another-simplified', 
+                label: 'Create Another Client',
+                onClick: () => {
+                  // Start new simplified flow
+                  setSimplifiedFlowData({ currentQuestion: 'companyName' });
+                  startNewFlow('create-client-simplified');
+                }
+              },
+              { 
+                id: 'back-to-tools', 
+                label: 'Back to Tools',
+                onClick: () => {
+                  handleStartOver();
+                }
+              }
+            ]
+          }
+        );
+        
+        // Mark flow as complete
+        setFlowActive(false);
+      }, 2500);
+    }
+  }, [addMessage, addSimpleMessage, addProcessingMessage, schedule, setSelectedActions, startNewFlow, setFlowActive, setCurrentFlow, handleStartOver]);
+
 
   const handleUserInput = useCallback((input: string) => {
     const lowerInput = input.toLowerCase();
+    
+    // Check if we're in simplified flow
+    if (currentFlow === 'create-client-simplified') {
+      // Get the current question state
+      const currentQuestion = simplifiedFlowData.currentQuestion;
+      console.log('Simplified flow - current question:', currentQuestion, 'input:', input);
+      
+      // If no current question or flow is complete, ignore input
+      if (!currentQuestion || currentQuestion === 'complete') {
+        console.log('No current question or flow complete, ignoring input');
+        return;
+      }
+      
+      // Handle text input for delivery choice - check this FIRST before other states
+      if (currentQuestion === 'delivery' || currentQuestion === 'delivery-choice') {
+        // Map common text inputs to delivery methods
+        const deliveryMap: Record<string, string> = {
+          'email': 'email',
+          'email delivery': 'email',
+          'webhook': 'webhook',
+          'http': 'webhook',
+          'http webhook': 'webhook',
+          'ftp': 'ftp',
+          'ftp transfer': 'ftp',
+          'skip': 'skip',
+          'skip for now': 'skip',
+          'none': 'skip'
+        };
+        
+        const normalizedInput = input.toLowerCase().trim();
+        const mappedDelivery = deliveryMap[normalizedInput];
+        
+        if (mappedDelivery) {
+          // Process as a valid delivery choice
+          handleSimplifiedResponse(mappedDelivery, false);
+        } else {
+          // Invalid input for delivery choice
+          addSimpleMessage(input, 'user');
+          addMessage(
+            "Please choose a delivery method: Email delivery, HTTP webhook, FTP transfer, or Skip for now.",
+            'assistant'
+          );
+        }
+        return;
+      }
+      
+      // Special handling for when user types delivery method keywords during other questions
+      // This helps recover from state confusion
+      if (currentQuestion === 'email' || currentQuestion === 'custom-credentials') {
+        const deliveryKeywords = ['email delivery', 'http webhook', 'webhook', 'ftp transfer', 'ftp', 'skip for now'];
+        const normalizedInput = input.toLowerCase().trim();
+        
+        if (deliveryKeywords.includes(normalizedInput)) {
+          // User is trying to answer delivery question, update state accordingly
+          console.log('Detected delivery keyword during wrong state, correcting state to delivery-choice');
+          setSimplifiedFlowData(prev => ({ 
+            ...prev, 
+            currentQuestion: 'delivery-choice'
+          }));
+          
+          // Now handle as delivery choice
+          const deliveryMap: Record<string, string> = {
+            'email': 'email',
+            'email delivery': 'email',
+            'webhook': 'webhook',
+            'http webhook': 'webhook',
+            'ftp': 'ftp',
+            'ftp transfer': 'ftp',
+            'skip': 'skip',
+            'skip for now': 'skip'
+          };
+          
+          const mappedDelivery = deliveryMap[normalizedInput] || normalizedInput;
+          handleSimplifiedResponse(mappedDelivery, false);
+          return;
+        }
+      }
+      
+      console.log('Processing simplified flow input:', input, 'for question:', currentQuestion);
+      handleSimplifiedResponse(input, true); // Skip duplicate user message since already added
+      return;
+    }
     
     // Activate flow mode when user starts typing
     setFlowActive(true);
@@ -2408,7 +3600,18 @@ export function ConversationalChat({
         }
       );
     }
-  }, [addMessage, handleToolSelection, onShowAllTools]);
+  }, [addMessage, handleToolSelection, onShowAllTools, currentFlow, simplifiedFlowData, handleSimplifiedResponse]);
+
+  // Simplified client setup - conversational flow without forms/modules
+  const handleSimplifiedClientSetup = useCallback(() => {
+    // Reset flow data
+    setSimplifiedFlowData({ currentQuestion: 'companyName' });
+    
+    addMessage(
+      "I'll help you quickly set up a new client. Let's start simple.\n\nWhat's the company name? (Type your answer in the chat)",
+      'assistant'
+    );
+  }, [addMessage]);
 
   const handleSendMessage = useCallback(() => {
     if (!inputValue.trim() || isProcessing) return;

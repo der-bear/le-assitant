@@ -5,7 +5,9 @@ import { Message, AddMessageOptions } from './chat-types';
  * Generate unique message ID
  */
 export function generateMessageId(counter: number): string {
-  return `msg_${Date.now()}_${counter}`;
+  // Add random component to ensure uniqueness even in rapid succession
+  const random = Math.random().toString(36).substr(2, 9);
+  return `msg_${Date.now()}_${counter}_${random}`;
 }
 
 /**
