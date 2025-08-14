@@ -67,7 +67,7 @@ export function ToolPanel({ selectedTool, onBack }: ToolPanelProps) {
         email: clientData.email,
         username: clientData.username,
         password: clientData.password,
-        notes: `Created via AI Assistant on ${new Date().toLocaleDateString()}`
+        notes: `Created via Copilot on ${new Date().toLocaleDateString()}`
       });
 
       if (clientResponse.success && clientResponse.ClientUID) {

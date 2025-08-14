@@ -12,7 +12,12 @@
       "Bash(npm run dev:*)",
       "Bash(lsof:*)",
       "Bash(curl:*)",
-      "Bash(pkill:*)"
+      "Bash(pkill:*)",
+      "Bash(touch:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "WebFetch(domain:api.github.com)",
+      "Bash(git reset:*)"
     ],
     "deny": []
   }

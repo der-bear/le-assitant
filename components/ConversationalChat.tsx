@@ -281,7 +281,7 @@ export function ConversationalChat({
   const [messages, setMessages] = useState<Message[]>(() => [
     {
       id: 'welcome',
-      content: 'Hi! I\'m your LeadExec AI assistant. I can help you create clients, set up delivery methods, and much more.\n\nI use a universal framework of embeddable modules that work seamlessly in our conversation. I can understand natural language - try asking me about specific clients or describing what you need. Here are some popular tools to get started:',
+      content: 'Hi! I\'m your LeadExec Copilot. I can help you create clients, set up delivery methods, and much more.\n\nI use a universal framework of embeddable modules that work seamlessly in our conversation. I can understand natural language - try asking me about specific clients or describing what you need. Here are some popular tools to get started:',
       sender: 'assistant',
       timestamp: new Date(),
       component: null, // Will be rendered dynamically

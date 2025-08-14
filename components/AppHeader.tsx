@@ -9,7 +9,7 @@ export function AppHeader() {
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
             <Bot className="w-6 h-6 text-primary" />
-            <h1 className="text-base font-medium">LeadExec AI Assistant</h1>
+            <h1 className="text-base font-medium">LeadExec Copilot</h1>
           </div>
           <Badge variant="secondary" className="text-xs font-normal">Beta</Badge>
         </div>
