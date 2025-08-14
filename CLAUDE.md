@@ -1,7 +1,7 @@
-# Claude Code Instructions for LeadExec Assistant
+# Claude Code Instructions for LeadExec Copilot
 
 ## Project Overview
-This is a React + TypeScript application for LeadExec AI Assistant - a conversational chat interface with embeddable UI modules for client management.
+This is a React + TypeScript application for LeadExec Copilot - a conversational chat interface with embeddable UI modules for client management.
 
 ## Key Technologies
 - **React 18** with TypeScript
@@ -75,6 +75,45 @@ npm run dev        # Start development server
 npm run build      # Build for production
 npm run preview    # Preview production build
 ```
+
+## Deployment to GitHub Pages
+
+### Prerequisites
+- Repository must be public OR you need GitHub Pro for private repos
+- GitHub Actions must be enabled
+- **IMPORTANT**: Never commit sensitive information (API keys, secrets, credentials) as the repository is public
+
+### Deployment Steps
+
+1. **Enable GitHub Pages:**
+   - Go to Settings → Pages in your GitHub repository
+   - Under "Source", select "GitHub Actions"
+   - Save the changes
+
+2. **Automatic Deployment:**
+   - Push changes to the `main` branch
+   - GitHub Actions workflow will automatically:
+     - Build the project with correct base path
+     - Deploy to GitHub Pages
+   - Check Actions tab for deployment status
+
+3. **Manual Deployment (Alternative):**
+   ```bash
+   npm run build       # Build with production base path
+   gh-pages -d dist    # Deploy dist folder to gh-pages branch
+   ```
+
+### Configuration Files
+
+- **vite.config.ts**: Configured to use `/le-assitant/` base path for production builds
+- **.github/workflows/deploy.yml**: GitHub Actions workflow for automatic deployment
+- **Base URL**: Site is available at `https://der-bear.github.io/le-assitant/`
+
+### Security Reminders
+- ⚠️ Repository is PUBLIC - visible to everyone
+- ⚠️ Never commit .env files or secrets
+- ⚠️ Use GitHub Secrets for sensitive configuration
+- ⚠️ Review all code before pushing to avoid exposing internal information
 
 ## Testing Checklist
 - [ ] Test Start Over button clears all locked states

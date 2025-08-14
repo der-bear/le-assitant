@@ -372,7 +372,7 @@ export default function App() {
             <div className="w-6 h-6 bg-foreground rounded flex items-center justify-center">
               <Sparkles className="w-3 h-3 text-background" />
             </div>
-            <h1 className="font-medium text-base">LeadExec AI Assistant</h1>
+            <h1 className="font-medium text-base">LeadExec Copilot</h1>
             <Badge variant="secondary" className="text-xs px-2 py-0.5 font-normal">Beta</Badge>
           </div>
           
