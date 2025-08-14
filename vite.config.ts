@@ -2,8 +2,9 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
 // https://vitejs.dev/config/
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   plugins: [react()],
+  base: command === 'build' ? '/le-assitant/' : '/',
   resolve: {
     alias: {
       // allow bogus specifiers in code to resolve to actual packages
@@ -39,4 +40,4 @@ export default defineConfig({
       'lucide-react@0.487.0': 'lucide-react'
     }
   }
-})
+}))
